@@ -132,6 +132,36 @@ publishing {
             artifact(dokkaJar)
             // And sources
             artifact(sourcesJar)
+
+            pom {
+                packaging = "jar"
+                name.set("Reactive Kafka")
+                description.set("""
+                    A high level kafka consumer which wrapps the low level api of Kafka Reactor and provides a similar usability like Spring Kafka
+                """.trimIndent())
+                url.set("https://github.com/quandoo/reactive-kafka")
+
+                scm {
+                    connection.set("scm:git:git://github.com/quandoo/reactive-kafka.git")
+                    developerConnection.set("scm:git:git@github.com:quandoo/reactive-kafka.git")
+                    url.set("http://github.com/quandoo/reactive-kafka.git")
+                }
+
+                licenses {
+                    license {
+                        name.set("The Apache License, Version 2.0")
+                        url.set("http://www.apache.org/licenses/LICENSE-2.0.txt")
+                    }
+                }
+
+                developers {
+                    developer {
+                        id.set("1")
+                        name.set("Emir Dizdarevic")
+                        email.set("account.oss@quandoo.com")
+                    }
+                }
+            }
         }
     }
 
