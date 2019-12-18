@@ -6,6 +6,7 @@ plugins {
     kotlin("kapt") version "1.3.50"
 
     `maven-publish`
+    signing
     id("org.jetbrains.dokka") version "0.9.16"
     id("net.researchgate.release") version "2.6.0"
     id("com.github.hierynomus.license") version "0.15.0"
@@ -145,6 +146,11 @@ publishing {
             }
         }
     }
+}
+
+signing {
+    useGpgCmd()
+    sign(publishing.publications["oss-nexus"])
 }
 
 license {
