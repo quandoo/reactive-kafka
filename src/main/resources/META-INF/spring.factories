@@ -1,0 +1,2 @@
+org.springframework.boot.autoconfigure.EnableAutoConfiguration=\
+com.quandoo.lib.reactivekafka.spring.KafkaAutoconfiguration
