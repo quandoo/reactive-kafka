@@ -153,6 +153,6 @@ license {
     strictCheck = true
 
     ext.set("year", "2019")
-    ext.set("name", "Quandoo GbmH")
+    ext.set("name", "Quandoo GmbH")
     ext.set("email", "account.oss@quandoo.com")
 }

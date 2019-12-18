@@ -27,7 +27,8 @@ module.exports = {
     "lib",
     "consumer",
     "producer",
-    "config"
+    "config",
+    "license"
   ],
   "types": {
     "chore": {
