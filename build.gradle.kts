@@ -10,18 +10,16 @@ plugins {
     id("org.jetbrains.dokka") version "0.9.16"
     id("net.researchgate.release") version "2.6.0"
     id("com.github.hierynomus.license") version "0.15.0"
+    id("org.hibernate.build.maven-repo-auth") version "3.0.0"
 }
 
 repositories {
     jcenter()
     mavenCentral()
-    mavenLocal()
 }
 
 group = "com.quandoo.lib"
 
-val ossNexusUser: String by project
-val ossNexusPassword: String by project
 val ktlint by configurations.creating
 
 dependencies {
@@ -167,12 +165,16 @@ publishing {
 
     repositories {
         maven {
+            val releaseRepoName = "sonatype-nexus-snapshots"
+            val snapshotRepoName = "sonatype-nexus-staging"
             val releasesRepoUrl = "https://oss.sonatype.org/service/local/staging/deploy/maven2"
             val snapshotsRepoUrl = "https://oss.sonatype.org/content/repositories/snapshots"
-            url = uri(if (version.toString().endsWith("SNAPSHOT")) snapshotsRepoUrl else releasesRepoUrl)
-            credentials {
-                username = System.getenv("OSS_MAVEN_REPO_USER") ?: ossNexusUser
-                password = System.getenv("OSS_MAVEN_REPO_PASS") ?: ossNexusPassword
+            if (version.toString().endsWith("SNAPSHOT")) {
+                name = snapshotRepoName
+                url = uri(snapshotsRepoUrl)
+            } else {
+                name = releaseRepoName
+                url = uri(releasesRepoUrl)
             }
         }
     }
