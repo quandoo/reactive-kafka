@@ -149,6 +149,7 @@ class KafkaConsumer {
                             },
                             1
                     )
+                    .observeOn(io.reactivex.schedulers.Schedulers.from { r -> schedulers[kafkaListenerMeta]!!.schedule(r) })
                     .retry()
                     .subscribeOn(io.reactivex.schedulers.Schedulers.from { r -> schedulers[kafkaListenerMeta]!!.schedule(r) }, true)
                     .subscribe(
