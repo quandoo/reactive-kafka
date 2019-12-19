@@ -53,8 +53,8 @@ class KafkaConsumer {
     private val schedulers: Map<KafkaListenerMeta<*, *>, Scheduler>
 
     constructor(
-            kafkaProperties: KafkaProperties,
-            kafkaListenerMetas: List<KafkaListenerMeta<*, *>>
+        kafkaProperties: KafkaProperties,
+        kafkaListenerMetas: List<KafkaListenerMeta<*, *>>
     ) {
         checkKafkaProperties(kafkaProperties)
         checkListeners(kafkaListenerMetas)
@@ -112,7 +112,7 @@ class KafkaConsumer {
                                 .bufferTimeout(kafkaProperties.consumer!!.batchSize.toInt(), Duration.ofMillis(kafkaProperties.consumer!!.batchWaitMillis), schedulers[kafkaListenerMeta]!!)
                 )
             }
-                    .flatMap (
+                    .flatMap(
                             { receiverRecords ->
                                 when (kafkaListenerMeta.handler) {
                                     is SingleHandler -> {
@@ -175,8 +175,8 @@ class KafkaConsumer {
     }
 
     private fun <K, V> processSingle(
-            kafkaListenerMeta: KafkaListenerMeta<K, V>,
-            receiverRecords: MutableList<out ReceiverRecord<Bytes, Bytes>>
+        kafkaListenerMeta: KafkaListenerMeta<K, V>,
+        receiverRecords: MutableList<out ReceiverRecord<Bytes, Bytes>>
     ): Single<List<ReceiverRecord<*, *>>> {
         return Single.defer {
             Flowable.fromIterable(receiverRecords)
@@ -202,8 +202,8 @@ class KafkaConsumer {
     }
 
     private fun <K, V> processBatch(
-            kafkaListenerMeta: KafkaListenerMeta<K, V>,
-            receiverRecords: MutableList<out ReceiverRecord<Bytes, Bytes>>
+        kafkaListenerMeta: KafkaListenerMeta<K, V>,
+        receiverRecords: MutableList<out ReceiverRecord<Bytes, Bytes>>
     ): Single<List<ReceiverRecord<*, *>>> {
         return Single.defer {
             Flowable.fromIterable(receiverRecords)
