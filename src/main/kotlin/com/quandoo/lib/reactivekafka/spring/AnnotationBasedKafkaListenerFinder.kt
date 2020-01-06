@@ -48,10 +48,10 @@ class AnnotationBasedKafkaListenerFinder(
     private val configurableBeanFactory: ConfigurableBeanFactory,
     private val applicationContext: ApplicationContext,
     private val objectMapper: ObjectMapper
-) : KafkaListenerFinder<Any, Any> {
+) : KafkaListenerFinder<Any?, Any?> {
 
     @Suppress("UNCHECKED_CAST")
-    override fun findListeners(): List<KafkaListenerMeta<String, Any>> {
+    override fun findListeners(): List<KafkaListenerMeta<String?, Any?>> {
         val embeddedValueResolver = EmbeddedValueResolver(configurableBeanFactory)
         val reflections = Reflections("", MethodAnnotationsScanner())
         val preFilterBeans = applicationContext.getBeansWithAnnotation(KafkaListenerPreFilter::class.java).values
@@ -74,18 +74,18 @@ class AnnotationBasedKafkaListenerFinder(
                     val annotation = method.getAnnotation(KafkaListener::class.java)
                     val instance = configurableBeanFactory.getBean(method.declaringClass)
                     val preFilter = preFilterValueClassMap[String::class to annotation.valueType]?.let { it as Predicate<ConsumerRecord<Bytes, Bytes>> } ?: Predicates.alwaysTrue()
-                    val filter = filterValueClassMap[String::class to annotation.valueType]?.let { it as Predicate<ConsumerRecord<*, *>> } ?: Predicates.alwaysTrue()
+                    val filter = filterValueClassMap[String::class to annotation.valueType]?.let { it as Predicate<ConsumerRecord<out Any?, out Any?>> } ?: Predicates.alwaysTrue()
                     val implementationMethodHandle = lookup.unreflect(method)
                     val callSite = ConstantCallSite(implementationMethodHandle)
                     val invoker = callSite.dynamicInvoker()
 
-                    KafkaListenerMeta<String, Any>(
+                    KafkaListenerMeta(
                             getHandler(method.parameterTypes, invoker, instance),
                             annotation.topics.map { topic -> embeddedValueResolver.resolveStringValue(topic) as String },
-                            String::class.java,
-                            annotation.valueType.java as Class<Any>,
-                            StringDeserializer(),
-                            KafkaJacksonDeserializer(objectMapper, annotation.valueType.java) as Deserializer<Any>,
+                            String::class.java as Class<String?>,
+                            annotation.valueType.java as Class<Any?>,
+                            StringDeserializer() as Deserializer<String?>,
+                            KafkaJacksonDeserializer(objectMapper, annotation.valueType.java) as Deserializer<Any?>,
                             preFilter,
                             filter
                     )

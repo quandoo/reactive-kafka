@@ -98,86 +98,88 @@ class KafkaConsumer {
 
     fun start() {
         for (i in 1..kafkaProperties.consumer!!.parallelism) {
-            startConsumer()
+            startConsumers()
         }
     }
 
     @SuppressWarnings("unchecked")
-    private fun startConsumer() {
-        kafkaListenerMetas.forEach { kafkaListenerMeta: KafkaListenerMeta<*, *> ->
-            val receiverOptions = createReceiverOptions(kafkaListenerMeta)
-            Flowable.defer {
-                RxJava2Adapter.fluxToFlowable(
-                        KafkaReceiver.create(receiverOptions).receive()
-                                .bufferTimeout(kafkaProperties.consumer!!.batchSize.toInt(), Duration.ofMillis(kafkaProperties.consumer!!.batchWaitMillis), schedulers[kafkaListenerMeta]!!)
-                )
-            }
-                    .flatMap(
-                            { receiverRecords ->
-                                when (kafkaListenerMeta.handler) {
-                                    is SingleHandler -> {
-                                        processSingle(kafkaListenerMeta, receiverRecords).toFlowable().map { receiverRecords }
-                                    }
-                                    is BatchHandler -> {
-                                        processBatch(kafkaListenerMeta, receiverRecords).toFlowable().map { receiverRecords }
-                                    }
-                                    else -> {
-                                        throw IllegalStateException("Unknown handler type: ${kafkaListenerMeta.handler.javaClass}")
-                                    }
-                                }
-                                        .observeOn(io.reactivex.schedulers.Schedulers.from { r -> schedulers[kafkaListenerMeta]!!.schedule(r) })
-                                        .concatMap(
-                                                { receiverRecords ->
-                                                    if (receiverRecords.isNotEmpty()) {
-                                                        // All offsets need to be ackd
-                                                        receiverRecords.forEach { it.receiverOffset().acknowledge() }
+    private fun startConsumers() {
+        kafkaListenerMetas.forEach { startConsumer(it) }
+    }
 
-                                                        val lastReceiverRecordPerTopicPartition = receiverRecords.map { it.receiverOffset().topicPartition() to it }.toMap()
-                                                        Flowable.fromIterable(lastReceiverRecordPerTopicPartition.values)
-                                                                .flatMap { receiverRecord ->
-                                                                    RxJava2Adapter.monoToCompletable(receiverRecord.receiverOffset().commit()).toSingle { receiverRecord }.toFlowable()
-                                                                }
-                                                                .toList()
-                                                                .toFlowable()
-                                                                .map { receiverRecords }
-                                                    } else {
-                                                        Flowable.just(receiverRecords)
-                                                    }
-                                                },
-                                                1
-                                        )
-                            },
-                            1
-                    )
-                    .observeOn(io.reactivex.schedulers.Schedulers.from { r -> schedulers[kafkaListenerMeta]!!.schedule(r) })
-                    .retry()
-                    .subscribeOn(io.reactivex.schedulers.Schedulers.from { r -> schedulers[kafkaListenerMeta]!!.schedule(r) }, true)
-                    .subscribe(
-                            object : DisposableSubscriber<List<ReceiverRecord<*, *>>>() {
-                                override fun onStart() {
-                                    request(1)
+    private fun <K, V> startConsumer(kafkaListenerMeta: KafkaListenerMeta<K, V>) {
+        val receiverOptions = createReceiverOptions(kafkaListenerMeta)
+        Flowable.defer {
+            RxJava2Adapter.fluxToFlowable(
+                    KafkaReceiver.create(receiverOptions).receive()
+                            .bufferTimeout(kafkaProperties.consumer!!.batchSize.toInt(), Duration.ofMillis(kafkaProperties.consumer!!.batchWaitMillis), schedulers[kafkaListenerMeta]!!)
+            )
+        }
+                .flatMap(
+                        { receiverRecords ->
+                            when (kafkaListenerMeta.handler) {
+                                is SingleHandler -> {
+                                    processSingle(kafkaListenerMeta, receiverRecords).toFlowable().map { receiverRecords }
                                 }
-
-                                override fun onNext(receiverRecord: List<ReceiverRecord<*, *>>) {
-                                    receiverRecord.forEach { logMessage("Message processed", it) }
-                                    request(1)
+                                is BatchHandler -> {
+                                    processBatch(kafkaListenerMeta, receiverRecords).toFlowable().map { receiverRecords }
                                 }
-
-                                override fun onError(ex: Throwable) {
-                                    log.error("Consumer terminated", ex)
-                                }
-
-                                override fun onComplete() {
-                                    log.error("Consumer terminated")
+                                else -> {
+                                    throw IllegalStateException("Unknown handler type: ${kafkaListenerMeta.handler.javaClass}")
                                 }
                             }
-                    )
-        }
+                                    .observeOn(io.reactivex.schedulers.Schedulers.from { r -> schedulers[kafkaListenerMeta]!!.schedule(r) })
+                                    .concatMap(
+                                            { receiverRecords ->
+                                                if (receiverRecords.isNotEmpty()) {
+                                                    // All offsets need to be ackd
+                                                    receiverRecords.forEach { it.receiverOffset().acknowledge() }
+
+                                                    val lastReceiverRecordPerTopicPartition = receiverRecords.map { it.receiverOffset().topicPartition() to it }.toMap()
+                                                    Flowable.fromIterable(lastReceiverRecordPerTopicPartition.values)
+                                                            .flatMap { receiverRecord ->
+                                                                RxJava2Adapter.monoToCompletable(receiverRecord.receiverOffset().commit()).toSingle { receiverRecord }.toFlowable()
+                                                            }
+                                                            .toList()
+                                                            .toFlowable()
+                                                            .map { receiverRecords }
+                                                } else {
+                                                    Flowable.just(receiverRecords)
+                                                }
+                                            },
+                                            1
+                                    )
+                        },
+                        1
+                )
+                .observeOn(io.reactivex.schedulers.Schedulers.from { r -> schedulers[kafkaListenerMeta]!!.schedule(r) })
+                .retry()
+                .subscribeOn(io.reactivex.schedulers.Schedulers.from { r -> schedulers[kafkaListenerMeta]!!.schedule(r) }, true)
+                .subscribe(
+                        object : DisposableSubscriber<List<ReceiverRecord<*, *>>>() {
+                            override fun onStart() {
+                                request(1)
+                            }
+
+                            override fun onNext(receiverRecord: List<ReceiverRecord<*, *>>) {
+                                receiverRecord.forEach { logMessage("Message processed", it) }
+                                request(1)
+                            }
+
+                            override fun onError(ex: Throwable) {
+                                log.error("Consumer terminated", ex)
+                            }
+
+                            override fun onComplete() {
+                                log.error("Consumer terminated")
+                            }
+                        }
+                )
     }
 
     private fun <K, V> processSingle(
         kafkaListenerMeta: KafkaListenerMeta<K, V>,
-        receiverRecords: MutableList<out ReceiverRecord<Bytes, Bytes>>
+        receiverRecords: MutableList<ReceiverRecord<Bytes, Bytes>>
     ): Single<List<ReceiverRecord<*, *>>> {
         return Single.defer {
             Flowable.fromIterable(receiverRecords)
@@ -242,7 +244,7 @@ class KafkaConsumer {
         return pass
     }
 
-    private fun <K, V> filterMessage(kafkaListenerMeta: KafkaListenerMeta<K, V>, receiverRecord: ReceiverRecord<*, *>): Boolean {
+    private fun <K, V> filterMessage(kafkaListenerMeta: KafkaListenerMeta<K, V>, receiverRecord: ReceiverRecord<K?, V?>): Boolean {
         val pass = kafkaListenerMeta.filter.apply(receiverRecord)
         if (!pass) {
             logMessage("Messages filtered out", receiverRecord)

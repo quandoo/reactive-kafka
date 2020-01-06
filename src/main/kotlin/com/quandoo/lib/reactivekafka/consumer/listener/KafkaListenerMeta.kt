@@ -29,10 +29,10 @@ import org.apache.kafka.common.utils.Bytes
 data class KafkaListenerMeta<K, V>(
     val handler: Handler<*, *>,
     val topics: List<String>,
-    val keyClass: Class<out K>,
-    val valueClass: Class<out V>,
+    val keyClass: Class<K>,
+    val valueClass: Class<V>,
     val keyDeserializer: Deserializer<K>,
     val valueDeserializer: Deserializer<V>,
-    val preFilter: Predicate<ConsumerRecord<Bytes, Bytes>> = Predicates.alwaysTrue(),
-    val filter: Predicate<ConsumerRecord<*, *>> = Predicates.alwaysTrue()
+    val preFilter: Predicate<in ConsumerRecord<Bytes, Bytes>> = Predicates.alwaysTrue(),
+    val filter: Predicate<in ConsumerRecord<in K, in V>> = Predicates.alwaysTrue()
 )
