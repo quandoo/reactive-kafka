@@ -13,18 +13,18 @@
  *       See the License for the specific language governing permissions and
  *       limitations under the License.
  */
-package com.quandoo.lib.reactivekafka.consumer.listener
+package com.quandoo.lib.reactivekafka.spring
 
 import kotlin.reflect.KClass
+import org.springframework.context.annotation.Conditional
 
 /**
  * @author Emir Dizdarevic
- * @since 1.0.0
+ * @since 1.1.0
  */
-@Repeatable
-@Target(AnnotationTarget.CLASS)
+@Target(AnnotationTarget.FUNCTION)
 @Retention(AnnotationRetention.RUNTIME)
-annotation class KafkaListenerFilter(
-    val groupId: String = "",
-    val valueClass: KClass<*>
+@Conditional(OnAnnotationCondition::class)
+annotation class ConditionalOnAnnotation(
+    val annotation: KClass<out Annotation>
 )

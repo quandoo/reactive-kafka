@@ -28,16 +28,19 @@ dependencies {
     val testcontainersVersion = "1.12.3"
 
     ktlint("com.pinterest:ktlint:0.35.0")
-    implementation(kotlin("reflect"))
     implementation(kotlin("stdlib-jdk8"))
 
     // Utils
-    implementation("org.reflections:reflections:0.9.9")
+    implementation("org.reflections:reflections:0.9.9") {
+        exclude(module = "guava")
+    }
     implementation("com.fasterxml.jackson.core:jackson-core:$jacksonVersion")
     implementation("com.fasterxml.jackson.core:jackson-databind:$jacksonVersion")
     implementation("com.fasterxml.jackson.datatype:jackson-datatype-jsr310:$jacksonVersion")
     implementation("com.fasterxml.jackson.datatype:jackson-datatype-jdk8:$jacksonVersion")
     implementation("com.fasterxml.jackson.module:jackson-module-kotlin:$jacksonVersion")
+    implementation("org.apache.commons:commons-lang3:3.9")
+    implementation("com.google.guava:guava:28.1-jre")
 
     api("io.reactivex.rxjava2:rxjava:2.2.14")
     api("io.projectreactor.addons:reactor-adapter:3.3.0.RELEASE")

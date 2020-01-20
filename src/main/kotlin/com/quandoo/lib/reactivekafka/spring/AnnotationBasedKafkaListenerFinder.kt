@@ -30,6 +30,7 @@ import com.quandoo.lib.reactivekafka.consumer.listener.KafkaListenerPreFilter
 import java.lang.invoke.ConstantCallSite
 import java.lang.invoke.MethodHandle
 import java.lang.invoke.MethodHandles
+import org.apache.commons.lang3.StringUtils
 import org.apache.kafka.clients.consumer.ConsumerRecord
 import org.apache.kafka.common.serialization.Deserializer
 import org.apache.kafka.common.serialization.StringDeserializer
@@ -56,14 +57,23 @@ class AnnotationBasedKafkaListenerFinder(
         val reflections = Reflections("", MethodAnnotationsScanner())
         val preFilterBeans = applicationContext.getBeansWithAnnotation(KafkaListenerPreFilter::class.java).values
         val filterBeans = applicationContext.getBeansWithAnnotation(KafkaListenerFilter::class.java).values
-        val preFilterValueClassMap = preFilterBeans.map {
-            val annotation = it.javaClass.getAnnotation(KafkaListenerPreFilter::class.java)
-            (String::class to annotation.valueClass) to it
-        }.toMap()
-        val filterValueClassMap = filterBeans.map {
-            val annotation = it.javaClass.getAnnotation(KafkaListenerFilter::class.java)
-            (String::class to annotation.valueClass) to it
-        }.toMap()
+        val preFilterValueClassMap = preFilterBeans
+                .groupBy { embeddedValueResolver.resolveStringValue(it.javaClass.getAnnotation(KafkaListenerPreFilter::class.java).groupId) }
+                .map { filters ->
+                    filters.key to filters.value.map {
+                        val annotation = it.javaClass.getAnnotation(KafkaListenerPreFilter::class.java)
+                        (String::class to annotation.valueClass) to it
+                    }.toMap()
+                }.toMap()
+
+        val filterValueClassMap = filterBeans
+                .groupBy { embeddedValueResolver.resolveStringValue(it.javaClass.getAnnotation(KafkaListenerFilter::class.java).groupId) }
+                .map { filters ->
+                    filters.key to filters.value.map {
+                        val annotation = it.javaClass.getAnnotation(KafkaListenerFilter::class.java)
+                        (String::class to annotation.valueClass) to it
+                    }.toMap()
+                }.toMap()
 
         checkFilters(preFilterBeans.map { it.javaClass }.toList())
         checkFilters(filterBeans.map { it.javaClass }.toList())
@@ -73,21 +83,32 @@ class AnnotationBasedKafkaListenerFinder(
                 .map { method ->
                     val annotation = method.getAnnotation(KafkaListener::class.java)
                     val instance = configurableBeanFactory.getBean(method.declaringClass)
-                    val preFilter = preFilterValueClassMap[String::class to annotation.valueType]?.let { it as Predicate<ConsumerRecord<Bytes, Bytes>> } ?: Predicates.alwaysTrue()
-                    val filter = filterValueClassMap[String::class to annotation.valueType]?.let { it as Predicate<ConsumerRecord<out Any?, out Any?>> } ?: Predicates.alwaysTrue()
+                    val preFilter = preFilterValueClassMap[embeddedValueResolver.resolveStringValue(annotation.groupId)]?.get(String::class to annotation.valueType)?.let { it as Predicate<ConsumerRecord<Bytes, Bytes>> }
+                            ?: Predicates.alwaysTrue()
+                    val filter = filterValueClassMap[embeddedValueResolver.resolveStringValue(annotation.groupId)]?.get(String::class to annotation.valueType)?.let { it as Predicate<ConsumerRecord<out Any?, out Any?>> }
+                            ?: Predicates.alwaysTrue()
                     val implementationMethodHandle = lookup.unreflect(method)
                     val callSite = ConstantCallSite(implementationMethodHandle)
                     val invoker = callSite.dynamicInvoker()
 
                     KafkaListenerMeta(
-                            getHandler(method.parameterTypes, invoker, instance),
-                            annotation.topics.map { topic -> embeddedValueResolver.resolveStringValue(topic) as String },
-                            String::class.java as Class<String?>,
-                            annotation.valueType.java as Class<Any?>,
-                            StringDeserializer() as Deserializer<String?>,
-                            KafkaJacksonDeserializer(objectMapper, annotation.valueType.java) as Deserializer<Any?>,
-                            preFilter,
-                            filter
+                            handler = getHandler(method.parameterTypes, invoker, instance),
+                            topics = annotation.topics.map { topic -> embeddedValueResolver.resolveStringValue(topic) as String },
+                            keyClass = String::class.java as Class<String?>,
+                            valueClass = annotation.valueType.java as Class<Any?>,
+                            keyDeserializer = StringDeserializer() as Deserializer<String?>,
+                            valueDeserializer = KafkaJacksonDeserializer(objectMapper, annotation.valueType.java) as Deserializer<Any?>,
+                            preFilter = preFilter,
+                            filter = filter,
+
+                            groupId = StringUtils.trimToNull(embeddedValueResolver.resolveStringValue(annotation.groupId)),
+                            batchSize = annotation.batchSize.let { if (it < 0) null else it },
+                            parallelism = annotation.parallelism.let { if (it < 0) null else it },
+                            maxPoolIntervalMillis = annotation.maxPoolIntervalMillis.let { if (it < 0) null else it },
+                            batchWaitMillis = annotation.batchWaitMillis.let { if (it < 0) null else it },
+                            retryBackoffMillis = annotation.retryBackoffMillis.let { if (it < 0) null else it },
+                            partitionAssignmentStrategy = StringUtils.trimToNull(embeddedValueResolver.resolveStringValue(annotation.partitionAssignmentStrategy)),
+                            autoOffsetReset = StringUtils.trimToNull(embeddedValueResolver.resolveStringValue(annotation.autoOffsetReset))
                     )
                 }
     }

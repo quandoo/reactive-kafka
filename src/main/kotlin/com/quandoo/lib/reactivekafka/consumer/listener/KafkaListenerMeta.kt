@@ -34,5 +34,15 @@ data class KafkaListenerMeta<K, V>(
     val keyDeserializer: Deserializer<K>,
     val valueDeserializer: Deserializer<V>,
     val preFilter: Predicate<in ConsumerRecord<Bytes, Bytes>> = Predicates.alwaysTrue(),
-    val filter: Predicate<in ConsumerRecord<in K, in V>> = Predicates.alwaysTrue()
+    val filter: Predicate<in ConsumerRecord<in K, in V>> = Predicates.alwaysTrue(),
+
+        // Optional properties
+    val groupId: String? = null,
+    val batchSize: Int? = null,
+    val parallelism: Int? = null,
+    val maxPoolIntervalMillis: Int? = null,
+    val batchWaitMillis: Long? = null,
+    val retryBackoffMillis: Long? = null,
+    val partitionAssignmentStrategy: String? = null,
+    val autoOffsetReset: String? = null
 )

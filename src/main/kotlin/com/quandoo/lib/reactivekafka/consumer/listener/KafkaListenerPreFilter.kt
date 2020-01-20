@@ -25,5 +25,6 @@ import kotlin.reflect.KClass
 @Target(AnnotationTarget.CLASS)
 @Retention(AnnotationRetention.RUNTIME)
 annotation class KafkaListenerPreFilter(
+    val groupId: String = "",
     val valueClass: KClass<*>
 )

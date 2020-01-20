@@ -4,7 +4,7 @@ and provides a similar usability like [Spring Kafka](https://spring.io/projects/
 
 ## Dependency
 ```gradle
-implementation("com.quandoo.lib:reactive-kafka:1.0.3")
+implementation("com.quandoo.lib:reactive-kafka:1.1.0")
 ```
 
 ## Usage
@@ -66,13 +66,16 @@ kafka:
     login-refresh-buffer-seconds: 10
 ```
 
+All consumer properties can be also specified/overloaded in the listener annotation.
+
 #### Consumer configuration
-The function which is handling the message has to return RxJava2 Completable or Reactor Mono<Void>
+The function which is handling the message has to return RxJava2 Completable or Reactor Mono<Void>.
+The name parameter is putting the listeners and filters in a group. Filters will apply to listeners which have the same name.
 
 ##### Single Listener 
 ```java
       // Topics support SPEL
-      @KafkaListener(topics = {"topic1", "topic2"}, valueType = DTO.class)
+      @KafkaListener(name = "live-data", groupId = "test-consumer", topics = {"topic1", "topic2"}, valueType = DTO.class)
       public Completable processMessage(final ConsumerRecord<String, DTO> message) {
           // Do something
       }
@@ -81,7 +84,7 @@ The function which is handling the message has to return RxJava2 Completable or 
 ##### Batch Listener 
 ```java
       // Topics support SPEL
-      @KafkaListener(topics = {"topic1", "topic2"}, valueType = DTO.class)
+      @KafkaListener(name = "live-data", groupId = "test-consumer", topics = {"topic1", "topic2"}, valueType = DTO.class)
       public Mono<Void> processMessage(final List<ConsumerRecord<String, DTO>> messages) {
           // Do something
       }
@@ -91,7 +94,7 @@ The function which is handling the message has to return RxJava2 Completable or 
 Allows to filter the message after key and value deserializer
 ```java
       @Component
-      @KafkaListenerFilter(valueClass = DTO.class)
+      @KafkaListenerFilter(name = "live-data", valueClass = DTO.class)
       public class VersionFilter implements Predicate<ConsumerRecord<Object, Object>> {
       
           @Override
@@ -105,7 +108,7 @@ Allows to filter the message after key and value deserializer
 Allows to filter the message before the key and value deserializers kick in
 ```java
       @Component
-      @KafkaListenerPreFilter(valueClass = DTO.class)
+      @KafkaListenerPreFilter(name = "live-data", valueClass = DTO.class)
       public class VersionFilter implements Predicate<ConsumerRecord<Bytes, Bytes>> {
       
           Boolean apply(ConsumerRecord<Bytes, Bytes> consumerRecord) {
