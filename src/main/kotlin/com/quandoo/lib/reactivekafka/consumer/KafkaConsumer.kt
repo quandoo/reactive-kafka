@@ -15,6 +15,7 @@
  */
 package com.quandoo.lib.reactivekafka.consumer
 
+import com.google.common.base.MoreObjects
 import com.quandoo.lib.reactivekafka.KafkaProperties
 import com.quandoo.lib.reactivekafka.consumer.listener.KafkaListenerMeta
 import com.quandoo.lib.reactivekafka.util.KafkaConfigHelper
@@ -54,33 +55,58 @@ class KafkaConsumer {
 
     constructor(
         kafkaProperties: KafkaProperties,
-        kafkaListenerMetas: List<KafkaListenerMeta<*, *>>
+        originalKafkaListenerMetas: List<KafkaListenerMeta<*, *>>
     ) {
-        checkKafkaProperties(kafkaProperties)
-        checkListeners(kafkaListenerMetas)
-
         this.kafkaProperties = kafkaProperties
-        this.kafkaListenerMetas = kafkaListenerMetas
+        this.kafkaListenerMetas = mergeConfiguration(kafkaProperties, originalKafkaListenerMetas)
         this.schedulers = kafkaListenerMetas.map { it to Schedulers.newParallel("kafka-consumer-${it.topics}", kafkaProperties.consumer!!.parallelism) }.toMap()
+
+        checkListenerMetas(kafkaListenerMetas)
     }
 
-    private fun checkKafkaProperties(kafkaProperties: KafkaProperties) {
-        checkNotNull(kafkaProperties.consumer) { "Consumer properties have to be set" }
+    private fun mergeConfiguration(kafkaProperties: KafkaProperties, listeners: List<KafkaListenerMeta<*, *>>): List<KafkaListenerMeta<*, *>> {
+        return listeners.map { kafkaListenerMeta ->
+            kafkaListenerMeta.copy(
+                    groupId = MoreObjects.firstNonNull(kafkaListenerMeta.groupId, kafkaProperties.consumer?.groupId),
+                    batchSize = MoreObjects.firstNonNull(kafkaListenerMeta.batchSize, kafkaProperties.consumer?.batchSize),
+                    parallelism = MoreObjects.firstNonNull(kafkaListenerMeta.parallelism, kafkaProperties.consumer?.parallelism),
+                    maxPoolIntervalMillis = MoreObjects.firstNonNull(kafkaListenerMeta.maxPoolIntervalMillis, kafkaProperties.consumer?.maxPoolIntervalMillis),
+                    batchWaitMillis = MoreObjects.firstNonNull(kafkaListenerMeta.batchWaitMillis, kafkaProperties.consumer?.batchWaitMillis),
+                    retryBackoffMillis = MoreObjects.firstNonNull(kafkaListenerMeta.retryBackoffMillis, kafkaProperties.consumer?.retryBackoffMillis),
+                    partitionAssignmentStrategy = MoreObjects.firstNonNull(kafkaListenerMeta.partitionAssignmentStrategy, kafkaProperties.consumer?.partitionAssignmentStrategy),
+                    autoOffsetReset = MoreObjects.firstNonNull(kafkaListenerMeta.autoOffsetReset, kafkaProperties.consumer?.autoOffsetReset)
+            )
+        }
     }
 
-    private fun checkListeners(listeners: List<KafkaListenerMeta<*, *>>): List<KafkaListenerMeta<*, *>> {
-        check(listeners.map { it.valueClass }.size == listeners.map { it.valueClass }.toSet().size) { "Only one listener per Entity can be defined" }
+    private fun checkListenerMetas(listeners: List<KafkaListenerMeta<*, *>>): List<KafkaListenerMeta<*, *>> {
+        check(listeners.isNotEmpty()) { "At least one consumer has to be defined" }
+
+        listeners.groupBy { it.groupId }.forEach { entry ->
+            check(entry.value.map { it.valueClass }.size == entry.value.map { it.valueClass }.toSet().size) { "Only one listener per groupID and Entity can be defined" }
+            entry.value.forEach {
+                checkNotNull(it.groupId) { "groupId mandatory" }
+                checkNotNull(it.batchSize) { "batchSize mandatory" }
+                checkNotNull(it.parallelism) { "parallelism mandatory" }
+                checkNotNull(it.maxPoolIntervalMillis) { "maxPoolIntervalMillis mandatory" }
+                checkNotNull(it.batchWaitMillis) { "batchWaitMillis mandatory" }
+                checkNotNull(it.retryBackoffMillis) { "retryBackoffMillis mandatory" }
+                checkNotNull(it.partitionAssignmentStrategy) { "partitionAssignmentStrategy mandatory" }
+                checkNotNull(it.autoOffsetReset) { "autoOffsetReset mandatory" }
+            }
+        }
+
         return listeners
     }
 
     private fun <K, V> createReceiverOptions(kafkaListenerMeta: KafkaListenerMeta<K, V>): ReceiverOptions<Bytes, Bytes> {
         val consumerProps = HashMap<String, Any>()
                 .also {
-                    it[ConsumerConfig.GROUP_ID_CONFIG] = kafkaProperties.consumer!!.groupId
-                    it[ConsumerConfig.AUTO_OFFSET_RESET_CONFIG] = kafkaProperties.consumer!!.autoOffsetReset
-                    it[ConsumerConfig.MAX_POLL_RECORDS_CONFIG] = kafkaProperties.consumer!!.batchSize.toInt()
-                    it[ConsumerConfig.MAX_POLL_INTERVAL_MS_CONFIG] = kafkaProperties.consumer!!.maxPoolIntervalMillis
-                    it[ConsumerConfig.PARTITION_ASSIGNMENT_STRATEGY_CONFIG] = kafkaProperties.consumer!!.partitionAssignmentStrategy
+                    it[ConsumerConfig.GROUP_ID_CONFIG] = kafkaListenerMeta.groupId as String
+                    it[ConsumerConfig.AUTO_OFFSET_RESET_CONFIG] = kafkaListenerMeta.autoOffsetReset as String
+                    it[ConsumerConfig.MAX_POLL_RECORDS_CONFIG] = kafkaListenerMeta.batchSize as Int
+                    it[ConsumerConfig.MAX_POLL_INTERVAL_MS_CONFIG] = kafkaListenerMeta.maxPoolIntervalMillis as Int
+                    it[ConsumerConfig.PARTITION_ASSIGNMENT_STRATEGY_CONFIG] = kafkaListenerMeta.partitionAssignmentStrategy as String
                 }
                 .let { KafkaConfigHelper.populateCommonConfig(kafkaProperties, it) }
                 .let { KafkaConfigHelper.populateSslConfig(kafkaProperties, it) }
@@ -97,14 +123,16 @@ class KafkaConsumer {
     }
 
     fun start() {
-        for (i in 1..kafkaProperties.consumer!!.parallelism) {
-            startConsumers()
-        }
+        startConsumers()
     }
 
     @SuppressWarnings("unchecked")
     private fun startConsumers() {
-        kafkaListenerMetas.forEach { startConsumer(it) }
+        kafkaListenerMetas.forEach {
+            for (i in 1..it.parallelism!!) {
+                startConsumer(it)
+            }
+        }
     }
 
     private fun <K, V> startConsumer(kafkaListenerMeta: KafkaListenerMeta<K, V>) {
@@ -112,7 +140,7 @@ class KafkaConsumer {
         Flowable.defer {
             RxJava2Adapter.fluxToFlowable(
                     KafkaReceiver.create(receiverOptions).receive()
-                            .bufferTimeout(kafkaProperties.consumer!!.batchSize.toInt(), Duration.ofMillis(kafkaProperties.consumer!!.batchWaitMillis), schedulers[kafkaListenerMeta]!!)
+                            .bufferTimeout(kafkaListenerMeta.batchSize!!, Duration.ofMillis(kafkaListenerMeta.batchWaitMillis!!), schedulers[kafkaListenerMeta]!!)
             )
         }
                 .flatMap(
@@ -196,12 +224,12 @@ class KafkaConsumer {
                                     }
                                 }
                                 .doOnError { error -> log.error("Failed to process kafka message", error) }
-                                .retryWhen { receiverRecord -> receiverRecord.delay(kafkaProperties.consumer!!.retryBackoffMillis, TimeUnit.MILLISECONDS) }
+                                .retryWhen { receiverRecord -> receiverRecord.delay(kafkaListenerMeta.retryBackoffMillis!!, TimeUnit.MILLISECONDS) }
                     }
                     .toList()
         }
                 .doOnError { error -> log.error("Failed to process batch", error) }
-                .retryWhen { receiverRecord -> receiverRecord.delay(kafkaProperties.consumer!!.retryBackoffMillis, TimeUnit.MILLISECONDS) }
+                .retryWhen { receiverRecord -> receiverRecord.delay(kafkaListenerMeta.retryBackoffMillis!!, TimeUnit.MILLISECONDS) }
     }
 
     private fun <K, V> processBatch(
@@ -225,14 +253,14 @@ class KafkaConsumer {
                                         }
                                     }
                                     .doOnError { error -> log.error("Failed to process kafka message", error) }
-                                    .retryWhen { receiverRecords -> receiverRecords.delay(kafkaProperties.consumer!!.retryBackoffMillis, TimeUnit.MILLISECONDS) }
+                                    .retryWhen { receiverRecords -> receiverRecords.delay(kafkaListenerMeta.retryBackoffMillis!!, TimeUnit.MILLISECONDS) }
                         } else {
                             Single.just(emptyList())
                         }
                     }
         }
                 .doOnError { error -> log.error("Failed to process batch", error) }
-                .retryWhen { receiverRecord -> receiverRecord.delay(kafkaProperties.consumer!!.retryBackoffMillis, TimeUnit.MILLISECONDS) }
+                .retryWhen { receiverRecord -> receiverRecord.delay(kafkaListenerMeta.retryBackoffMillis!!, TimeUnit.MILLISECONDS) }
     }
 
     private fun <K, V> preFilterMessage(kafkaListenerMeta: KafkaListenerMeta<K, V>, receiverRecord: ReceiverRecord<Bytes, Bytes>): Boolean {

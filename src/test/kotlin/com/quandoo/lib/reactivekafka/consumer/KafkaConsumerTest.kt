@@ -32,7 +32,7 @@ internal class KafkaConsumerTest {
         kafkaProperties.bootstrapServers = "localhost:9200"
 
         val exception = assertThrows<IllegalStateException> { KafkaConsumer(kafkaProperties, listOf()) }
-        assertThat(exception.message).isEqualTo("Consumer properties have to be set")
+        assertThat(exception.message).isEqualTo("At least one consumer has to be defined")
     }
 
     @Test
@@ -47,32 +47,34 @@ internal class KafkaConsumerTest {
 
         val kafkaListenerMetas = listOf(
                 KafkaListenerMeta(
-                        object : SingleHandler {
+                        handler = object : SingleHandler {
                             override fun apply(value: ConsumerRecord<*, *>): Any {
                                 return Completable.complete()
                             }
                         },
-                        listOf("topic1"),
-                        String::class.java,
-                        String::class.java,
-                        StringDeserializer(),
-                        StringDeserializer()
+                        topics = listOf("topic1"),
+                        keyClass = String::class.java,
+                        valueClass = String::class.java,
+                        keyDeserializer = StringDeserializer(),
+                        valueDeserializer = StringDeserializer(),
+                        groupId = "test"
                 ),
                 KafkaListenerMeta(
-                        object : SingleHandler {
+                        handler = object : SingleHandler {
                             override fun apply(value: ConsumerRecord<*, *>): Any {
                                 return Completable.complete()
                             }
                         },
-                        listOf("topic1"),
-                        String::class.java,
-                        String::class.java,
-                        StringDeserializer(),
-                        StringDeserializer()
+                        topics = listOf("topic1"),
+                        keyClass = String::class.java,
+                        valueClass = String::class.java,
+                        keyDeserializer = StringDeserializer(),
+                        valueDeserializer = StringDeserializer(),
+                        groupId = "test"
                 )
         )
 
         val exception = assertThrows<IllegalStateException> { KafkaConsumer(kafkaProperties, kafkaListenerMetas) }
-        assertThat(exception.message).isEqualTo("Only one listener per Entity can be defined")
+        assertThat(exception.message).isEqualTo("Only one listener per groupID and Entity can be defined")
     }
 }

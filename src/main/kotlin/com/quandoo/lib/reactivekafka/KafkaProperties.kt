@@ -34,18 +34,18 @@ class KafkaProperties {
     var sasl: SaslProperties? = null
 
     class KafkaConsumerProperties {
-        lateinit var groupId: String
+        var groupId: String? = null
         var autoOffsetReset: String = "latest"
         var parallelism = 1
         var partitionAssignmentStrategy = "org.apache.kafka.clients.consumer.RangeAssignor"
-        var batchSize = 10L
+        var batchSize = 10
         var maxPoolIntervalMillis = 300000
         var batchWaitMillis = 200L
         var retryBackoffMillis = 100L
     }
 
     class KafkaProducerProperties {
-        lateinit var maxInFlight: Integer
+        var maxInFlight: Int? = null
     }
 
     class SslProperties {

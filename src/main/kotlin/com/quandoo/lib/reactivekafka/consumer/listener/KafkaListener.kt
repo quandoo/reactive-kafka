@@ -25,5 +25,14 @@ import kotlin.reflect.KClass
 @Retention(AnnotationRetention.RUNTIME)
 annotation class KafkaListener(
     val topics: Array<String>,
-    val valueType: KClass<*>
+    val valueType: KClass<*>,
+
+    val groupId: String = "",
+    val batchSize: Int = -1,
+    val parallelism: Int = -1,
+    val maxPoolIntervalMillis: Int = -1,
+    val batchWaitMillis: Long = -1L,
+    val retryBackoffMillis: Long = -1L,
+    val partitionAssignmentStrategy: String = "",
+    val autoOffsetReset: String = ""
 )

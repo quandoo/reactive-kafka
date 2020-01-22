@@ -20,6 +20,7 @@ import com.github.daniel.shuy.kafka.jackson.serializer.KafkaJacksonSerializer
 import com.google.common.base.Predicate
 import com.quandoo.lib.reactivekafka.KafkaProperties
 import com.quandoo.lib.reactivekafka.consumer.KafkaConsumer
+import com.quandoo.lib.reactivekafka.consumer.listener.KafkaListener
 import com.quandoo.lib.reactivekafka.consumer.listener.KafkaListenerFinder
 import com.quandoo.lib.reactivekafka.consumer.listener.KafkaListenerMeta
 import com.quandoo.lib.reactivekafka.util.KafkaConfigHelper
@@ -63,6 +64,7 @@ class KafkaAutoconfiguration {
 
     @Bean
     @ConditionalOnMissingBean
+    @ConditionalOnAnnotation(annotation = KafkaListener::class)
     fun kafkaListenerFinder(): KafkaListenerFinder<*, *> {
         return AnnotationBasedKafkaListenerFinder(configurableBeanFactory, applicationConfiguration, objectMapper)
     }
@@ -70,7 +72,7 @@ class KafkaAutoconfiguration {
     @Bean
     @ConditionalOnMissingBean
     @Suppress("UNCHECKED_CAST")
-    @ConditionalOnProperty(prefix = "kafka.consumer", name = ["group-id"])
+    @ConditionalOnAnnotation(annotation = KafkaListener::class)
     fun kafkaConsumer(
         kafkaProperties: KafkaProperties,
         kafkaListenerFinder: KafkaListenerFinder<Any, Any>
@@ -102,7 +104,7 @@ class KafkaAutoconfiguration {
         val senderOptions = SenderOptions.create<String, Any>(producerProps)
                 .withKeySerializer(StringSerializer())
                 .withValueSerializer(KafkaJacksonSerializer<Any>(objectMapper))
-                .maxInFlight(kafkaProperties.producer!!.maxInFlight.toInt())
+                .maxInFlight(kafkaProperties.producer!!.maxInFlight!!.toInt())
 
         return KafkaSender.create<String, Any>(senderOptions)
     }
