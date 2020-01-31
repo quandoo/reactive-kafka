@@ -15,8 +15,6 @@
  */
 package com.quandoo.lib.reactivekafka.consumer.listener
 
-import kotlin.reflect.KClass
-
 /**
  * @author Emir Dizdarevic
  * @since 1.0.0
@@ -25,6 +23,5 @@ import kotlin.reflect.KClass
 @Target(AnnotationTarget.CLASS)
 @Retention(AnnotationRetention.RUNTIME)
 annotation class KafkaListenerPreFilter(
-    val groupId: String = "",
-    val valueClass: KClass<*>
+    val groupId: String = ""
 )

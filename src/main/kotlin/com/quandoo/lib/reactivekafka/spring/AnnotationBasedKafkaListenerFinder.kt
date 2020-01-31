@@ -30,6 +30,7 @@ import com.quandoo.lib.reactivekafka.consumer.listener.KafkaListenerPreFilter
 import java.lang.invoke.ConstantCallSite
 import java.lang.invoke.MethodHandle
 import java.lang.invoke.MethodHandles
+import kotlin.reflect.KClass
 import org.apache.commons.lang3.StringUtils
 import org.apache.kafka.clients.consumer.ConsumerRecord
 import org.apache.kafka.common.serialization.Deserializer
@@ -57,35 +58,31 @@ class AnnotationBasedKafkaListenerFinder(
         val reflections = Reflections("", MethodAnnotationsScanner())
         val preFilterBeans = applicationContext.getBeansWithAnnotation(KafkaListenerPreFilter::class.java).values
         val filterBeans = applicationContext.getBeansWithAnnotation(KafkaListenerFilter::class.java).values
-        val preFilterValueClassMap = preFilterBeans
-                .groupBy { embeddedValueResolver.resolveStringValue(it.javaClass.getAnnotation(KafkaListenerPreFilter::class.java).groupId) }
-                .map { filters ->
-                    filters.key to filters.value.map {
-                        val annotation = it.javaClass.getAnnotation(KafkaListenerPreFilter::class.java)
-                        (String::class to annotation.valueClass) to it
-                    }.toMap()
-                }.toMap()
+        val preFilterGroupIdMap = preFilterBeans
+                .groupBy { embeddedValueResolver.resolveStringValue(it.javaClass.getAnnotation(KafkaListenerPreFilter::class.java).groupId)!! }
 
-        val filterValueClassMap = filterBeans
-                .groupBy { embeddedValueResolver.resolveStringValue(it.javaClass.getAnnotation(KafkaListenerFilter::class.java).groupId) }
+        val filterGroupIdMap = filterBeans
+                .groupBy { embeddedValueResolver.resolveStringValue(it.javaClass.getAnnotation(KafkaListenerFilter::class.java).groupId)!! }
                 .map { filters ->
-                    filters.key to filters.value.map {
+                    filters.key to filters.value.groupBy {
                         val annotation = it.javaClass.getAnnotation(KafkaListenerFilter::class.java)
-                        (String::class to annotation.valueClass) to it
-                    }.toMap()
+                        (String::class to annotation.valueClass)
+                    }
                 }.toMap()
 
-        checkFilters(preFilterBeans.map { it.javaClass }.toList())
-        checkFilters(filterBeans.map { it.javaClass }.toList())
+        checkFilterImpl(preFilterBeans.map { it.javaClass }.toList())
+        checkFilterImpl(filterBeans.map { it.javaClass }.toList())
+        checkPreFilterUniqueness(preFilterGroupIdMap)
+        checkFilterUniqueness(filterGroupIdMap)
 
         val lookup = MethodHandles.lookup()
         return reflections.getMethodsAnnotatedWith(KafkaListener::class.java)
                 .map { method ->
                     val annotation = method.getAnnotation(KafkaListener::class.java)
                     val instance = configurableBeanFactory.getBean(method.declaringClass)
-                    val preFilter = preFilterValueClassMap[embeddedValueResolver.resolveStringValue(annotation.groupId)]?.get(String::class to annotation.valueType)?.let { it as Predicate<ConsumerRecord<Bytes, Bytes>> }
+                    val preFilter = preFilterGroupIdMap[embeddedValueResolver.resolveStringValue(annotation.groupId)]?.let { it[0] as Predicate<ConsumerRecord<Bytes, Bytes>> }
                             ?: Predicates.alwaysTrue()
-                    val filter = filterValueClassMap[embeddedValueResolver.resolveStringValue(annotation.groupId)]?.get(String::class to annotation.valueType)?.let { it as Predicate<ConsumerRecord<out Any?, out Any?>> }
+                    val filter = filterGroupIdMap[embeddedValueResolver.resolveStringValue(annotation.groupId)]?.get(String::class to annotation.valueType)?.let { it[0] as Predicate<ConsumerRecord<out Any?, out Any?>> }
                             ?: Predicates.alwaysTrue()
                     val implementationMethodHandle = lookup.unreflect(method)
                     val callSite = ConstantCallSite(implementationMethodHandle)
@@ -138,7 +135,21 @@ class AnnotationBasedKafkaListenerFinder(
         }
     }
 
-    private fun checkFilters(filterClasses: List<Class<*>>) {
+    private fun checkFilterImpl(filterClasses: List<Class<*>>) {
         filterClasses.forEach { check(Predicate::class.java.isAssignableFrom(it)) { "Filters have to implement com.google.common.base.Predicate" } }
+    }
+
+    private fun checkPreFilterUniqueness(prefilterBeans: Map<String, List<Any>>) {
+        prefilterBeans.forEach {
+            check(it.value.size == 1) { "Pre-Filters have to be unique per groupId" }
+        }
+    }
+
+    private fun checkFilterUniqueness(filterBeans: Map<String, Map<Pair<KClass<String>, KClass<*>>, List<Any>>>) {
+        filterBeans.forEach { perGroupId ->
+            perGroupId.value.forEach { perValueClass ->
+                check(perValueClass.value.size == 1) { "Filters have to be unique per groupId -> valueClass combination" }
+            }
+        }
     }
 }

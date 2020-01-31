@@ -61,13 +61,8 @@ internal class TestConfiguration {
     }
 
     @Bean
-    fun kafkaConsumerPreFilter1(): Predicate<ConsumerRecord<Bytes, Bytes>> {
-        return TestPreFilter1()
-    }
-
-    @Bean
-    fun kafkaConsumerPreFilter2(): Predicate<ConsumerRecord<Bytes, Bytes>> {
-        return TestPreFilter2()
+    fun kafkaConsumerPreFilter(): Predicate<ConsumerRecord<Bytes, Bytes>> {
+        return TestPreFilter()
     }
 }
 
@@ -85,15 +80,8 @@ class TestFilter2 : Predicate<ConsumerRecord<String, TestEntity2>> {
     }
 }
 
-@KafkaListenerPreFilter(valueClass = TestEntity1::class)
-class TestPreFilter1 : Predicate<ConsumerRecord<Bytes, Bytes>> {
-    override fun apply(receiverRecord: ConsumerRecord<Bytes, Bytes>?): Boolean {
-        return receiverRecord!!.headers().lastHeader("version")?.let { String(it.value()) < "100" } ?: true
-    }
-}
-
-@KafkaListenerPreFilter(valueClass = TestEntity2::class)
-class TestPreFilter2 : Predicate<ConsumerRecord<Bytes, Bytes>> {
+@KafkaListenerPreFilter
+class TestPreFilter : Predicate<ConsumerRecord<Bytes, Bytes>> {
     override fun apply(receiverRecord: ConsumerRecord<Bytes, Bytes>?): Boolean {
         return receiverRecord!!.headers().lastHeader("version")?.let { String(it.value()) < "100" } ?: true
     }

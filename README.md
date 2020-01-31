@@ -4,7 +4,7 @@ and provides a similar usability like [Spring Kafka](https://spring.io/projects/
 
 ## Dependency
 ```gradle
-implementation("com.quandoo.lib:reactive-kafka:1.1.0")
+implementation("com.quandoo.lib:reactive-kafka:1.2.0")
 ```
 
 ## Usage
@@ -75,7 +75,7 @@ The name parameter is putting the listeners and filters in a group. Filters will
 ##### Single Listener 
 ```java
       // Topics support SPEL
-      @KafkaListener(name = "live-data", groupId = "test-consumer", topics = {"topic1", "topic2"}, valueType = DTO.class)
+      @KafkaListener(groupId = "test-consumer", topics = {"topic1", "topic2"}, valueType = DTO.class)
       public Completable processMessage(final ConsumerRecord<String, DTO> message) {
           // Do something
       }
@@ -84,7 +84,7 @@ The name parameter is putting the listeners and filters in a group. Filters will
 ##### Batch Listener 
 ```java
       // Topics support SPEL
-      @KafkaListener(name = "live-data", groupId = "test-consumer", topics = {"topic1", "topic2"}, valueType = DTO.class)
+      @KafkaListener(groupId = "test-consumer", topics = {"topic1", "topic2"}, valueType = DTO.class)
       public Mono<Void> processMessage(final List<ConsumerRecord<String, DTO>> messages) {
           // Do something
       }
@@ -94,7 +94,7 @@ The name parameter is putting the listeners and filters in a group. Filters will
 Allows to filter the message after key and value deserializer
 ```java
       @Component
-      @KafkaListenerFilter(name = "live-data", valueClass = DTO.class)
+      @KafkaListenerFilter(groupId = "test-consumer", valueClass = DTO.class)
       public class VersionFilter implements Predicate<ConsumerRecord<Object, Object>> {
       
           @Override
@@ -108,7 +108,7 @@ Allows to filter the message after key and value deserializer
 Allows to filter the message before the key and value deserializers kick in
 ```java
       @Component
-      @KafkaListenerPreFilter(name = "live-data", valueClass = DTO.class)
+      @KafkaListenerPreFilter(groupId = "test-consumer")
       public class VersionFilter implements Predicate<ConsumerRecord<Bytes, Bytes>> {
       
           Boolean apply(ConsumerRecord<Bytes, Bytes> consumerRecord) {
