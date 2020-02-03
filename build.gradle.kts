@@ -185,7 +185,9 @@ publishing {
 
 signing {
     useGpgCmd()
-    sign(publishing.publications["oss-nexus"])
+    if (!version.toString().endsWith("SNAPSHOT")) {
+        sign(publishing.publications["oss-nexus"])
+    }
 }
 
 license {

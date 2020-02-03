@@ -16,10 +16,12 @@
 package com.quandoo.lib.reactivekafka.consumer
 
 import com.quandoo.lib.reactivekafka.AbstractIntegrationTest
+import com.quandoo.lib.reactivekafka.KafkaLagChecker
 import java.time.Duration
 import org.apache.kafka.common.header.internals.RecordHeader
 import org.assertj.core.api.Assertions.assertThat
 import org.awaitility.Awaitility.await
+import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
 import org.springframework.beans.factory.annotation.Autowired
@@ -35,10 +37,20 @@ internal class KafkaConsumerIntegrationTest : AbstractIntegrationTest() {
     @Autowired
     private lateinit var testBatchConsumer: TestBatchConsumer
 
+    @Autowired
+    private lateinit var kafkaLagChecker: KafkaLagChecker
+
     @BeforeEach
     internal fun setUp() {
         testSingleConsumer.messages.clear()
         testBatchConsumer.messages.clear()
+    }
+
+    @AfterEach
+    internal fun tearDown() {
+        await().atMost(Duration.ofSeconds(10L)).untilAsserted {
+            assertThat(kafkaLagChecker.areConsumersLagging()).isEqualTo(false)
+        }
     }
 
     @Test
@@ -79,6 +91,21 @@ internal class KafkaConsumerIntegrationTest : AbstractIntegrationTest() {
     }
 
     @Test
+    fun `SingleHandler - Test all message successfully filtered out by filter`() {
+        val message1 = TestEntity1("xyz", 1)
+        val message2 = TestEntity1("xyz", 1)
+        val message3 = TestEntity1("xyz", 1)
+
+        sendMessageToKafka(topic1, message1)
+        sendMessageToKafka(topic1, message2)
+        sendMessageToKafka(topic1, message3)
+
+        await().atMost(Duration.ofSeconds(10L)).untilAsserted {
+            assertThat(testSingleConsumer.messages).hasSize(0)
+        }
+    }
+
+    @Test
     @ExperimentalStdlibApi
     fun `SingleHandler - Test message successfully filtered out by pre-filter`() {
         val message1 = TestEntity1("message1", 1)
@@ -93,6 +120,22 @@ internal class KafkaConsumerIntegrationTest : AbstractIntegrationTest() {
             assertThat(testSingleConsumer.messages)
                     .hasSize(2)
                     .contains(message1, message2)
+        }
+    }
+
+    @Test
+    @ExperimentalStdlibApi
+    fun `SingleHandler - Test all message successfully filtered out by pre-filter`() {
+        val message1 = TestEntity1("message1", 1)
+        val message2 = TestEntity1("message2", 1)
+        val message3 = TestEntity1("message3", 1)
+
+        sendMessageToKafka(topic1, message1, listOf(RecordHeader("version", "99".encodeToByteArray())))
+        sendMessageToKafka(topic1, message2, listOf(RecordHeader("version", "99".encodeToByteArray())))
+        sendMessageToKafka(topic1, message3, listOf(RecordHeader("version", "99".encodeToByteArray())))
+
+        await().atMost(Duration.ofSeconds(10L)).untilAsserted {
+            assertThat(testSingleConsumer.messages).hasSize(0)
         }
     }
 
@@ -153,6 +196,21 @@ internal class KafkaConsumerIntegrationTest : AbstractIntegrationTest() {
     }
 
     @Test
+    fun `BatchHandler - Test all message successfully filtered out by filter`() {
+        val message1 = TestEntity2("xyz", 1)
+        val message2 = TestEntity2("xyz", 1)
+        val message3 = TestEntity2("xyz", 1)
+
+        sendMessageToKafka(topic2, message1)
+        sendMessageToKafka(topic2, message2)
+        sendMessageToKafka(topic2, message3)
+
+        await().atMost(Duration.ofSeconds(10L)).untilAsserted {
+            assertThat(testBatchConsumer.messages).hasSize(0)
+        }
+    }
+
+    @Test
     @ExperimentalStdlibApi
     fun `BatchHandler - Test message successfully filtered out by pre-filter`() {
         val message1 = TestEntity2("message1", 1)
@@ -167,6 +225,22 @@ internal class KafkaConsumerIntegrationTest : AbstractIntegrationTest() {
             assertThat(testBatchConsumer.messages)
                     .hasSize(2)
                     .contains(message1, message2)
+        }
+    }
+
+    @Test
+    @ExperimentalStdlibApi
+    fun `BatchHandler - Test all message successfully filtered out by pre-filter`() {
+        val message1 = TestEntity2("message1", 1)
+        val message2 = TestEntity2("message2", 1)
+        val message3 = TestEntity2("message3", 1)
+
+        sendMessageToKafka(topic2, message1, listOf(RecordHeader("version", "99".encodeToByteArray())))
+        sendMessageToKafka(topic2, message2, listOf(RecordHeader("version", "99".encodeToByteArray())))
+        sendMessageToKafka(topic2, message3, listOf(RecordHeader("version", "99".encodeToByteArray())))
+
+        await().atMost(Duration.ofSeconds(10L)).untilAsserted {
+            assertThat(testBatchConsumer.messages).hasSize(0)
         }
     }
 

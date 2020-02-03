@@ -64,6 +64,11 @@ internal class TestConfiguration {
     fun kafkaConsumerPreFilter(): Predicate<ConsumerRecord<Bytes, Bytes>> {
         return TestPreFilter()
     }
+
+    @Bean
+    fun kafkaLagChecker(kafkaProperties: KafkaProperties): KafkaLagChecker {
+        return KafkaLagChecker(kafkaProperties)
+    }
 }
 
 @KafkaListenerFilter(valueClass = TestEntity1::class)

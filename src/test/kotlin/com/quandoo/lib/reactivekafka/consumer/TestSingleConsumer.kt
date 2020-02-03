@@ -39,6 +39,7 @@ class TestSingleConsumer() {
 
     private val scheduler = Schedulers.from(Executors.newSingleThreadExecutor())
 
+    @Synchronized
     @KafkaListener(topics = ["testentity1"], valueType = TestEntity1::class)
     fun process(message: ConsumerRecord<String, TestEntity1>): Completable {
         log.info("Message received: {}", message.value())
