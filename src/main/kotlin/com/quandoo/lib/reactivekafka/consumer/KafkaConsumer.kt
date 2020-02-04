@@ -112,21 +112,21 @@ class KafkaConsumer(private val kafkaProperties: KafkaProperties, listeners: Lis
                             }
                                 .observeOn(io.reactivex.schedulers.Schedulers.from { r -> kafkaListenerProperties.scheduler.schedule(r) })
                                 .concatMap(
-                                        { records ->
-                                            if (records.isNotEmpty()) {
+                                        { innerReceiverRecords ->
+                                            if (innerReceiverRecords.isNotEmpty()) {
                                                 // All offsets need to be acknowledged
-                                                records.forEach { it.receiverOffset().acknowledge() }
+                                                innerReceiverRecords.forEach { it.receiverOffset().acknowledge() }
 
-                                                val lastReceiverRecordPerTopicPartition = records.map { it.receiverOffset().topicPartition() to it }.toMap()
+                                                val lastReceiverRecordPerTopicPartition = innerReceiverRecords.map { it.receiverOffset().topicPartition() to it }.toMap()
                                                 Flowable.fromIterable(lastReceiverRecordPerTopicPartition.values)
                                                         .flatMap { receiverRecord ->
                                                             RxJava2Adapter.monoToCompletable(receiverRecord.receiverOffset().commit()).toSingle { receiverRecord }.toFlowable()
                                                         }
                                                         .toList()
                                                         .toFlowable()
-                                                        .map { records }
+                                                        .map { innerReceiverRecords }
                                             } else {
-                                                Flowable.just(records)
+                                                Flowable.just(innerReceiverRecords)
                                             }
                                         },
                                         1
@@ -197,13 +197,13 @@ class KafkaConsumer(private val kafkaProperties: KafkaProperties, listeners: Lis
                     .map { serializeConsumerRecord(kafkaListenerProperties, it) }
                     .filter { receiverRecord -> filterMessage(kafkaListenerProperties, receiverRecord) }
                     .toList()
-                    .flatMap { records ->
-                        if (records.isNotEmpty()) {
-                            Single.defer { Single.just((kafkaListenerProperties.handler as BatchHandler).apply(records)) }
+                    .flatMap { innerReceiverRecords ->
+                        if (innerReceiverRecords.isNotEmpty()) {
+                            Single.defer { Single.just((kafkaListenerProperties.handler as BatchHandler).apply(innerReceiverRecords)) }
                                     .flatMap { result ->
                                         when (result) {
-                                            is Mono<*> -> RxJava2Adapter.monoToCompletable(result).toSingleDefault(records)
-                                            is Completable -> result.toSingleDefault(1).map { records }
+                                            is Mono<*> -> RxJava2Adapter.monoToCompletable(result).toSingleDefault(innerReceiverRecords)
+                                            is Completable -> result.toSingleDefault(1).map { innerReceiverRecords }
                                             else -> Single.error<List<ReceiverRecord<Any, Any>>>(IllegalStateException("Unknown return type ${result.javaClass}"))
                                         }
                                     }
