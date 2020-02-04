@@ -21,7 +21,7 @@ import org.apache.kafka.clients.consumer.ConsumerConfig
 import org.apache.kafka.clients.consumer.KafkaConsumer
 import org.apache.kafka.common.TopicPartition
 
-class KafkaLagChecker(private val kafkaProperties: KafkaProperties) {
+class KafkaLagChecker(kafkaProperties: KafkaProperties) {
 
     private val adminClient: AdminClient = AdminClient.create(mapOf(
             CommonClientConfigs.BOOTSTRAP_SERVERS_CONFIG to kafkaProperties.bootstrapServers
@@ -39,7 +39,7 @@ class KafkaLagChecker(private val kafkaProperties: KafkaProperties) {
                         .toSet()
         )
 
-        return if(topicOffsets.isEmpty()) {
+        return if (topicOffsets.isEmpty()) {
             true
         } else {
             groupIdOffsets.flatMap { groupIdOffset ->
