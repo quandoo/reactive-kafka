@@ -36,7 +36,7 @@ data class KafkaListenerMeta<K, V>(
     val preFilter: Predicate<in ConsumerRecord<Bytes, Bytes>> = Predicates.alwaysTrue(),
     val filter: Predicate<in ConsumerRecord<in K, in V>> = Predicates.alwaysTrue(),
 
-        // Optional properties
+    // Optional properties
     val groupId: String? = null,
     val batchSize: Int? = null,
     val parallelism: Int? = null,

@@ -139,8 +139,8 @@ class AnnotationBasedKafkaListenerFinder(
         filterClasses.forEach { check(Predicate::class.java.isAssignableFrom(it)) { "Filters have to implement com.google.common.base.Predicate" } }
     }
 
-    private fun checkPreFilterUniqueness(prefilterBeans: Map<String, List<Any>>) {
-        prefilterBeans.forEach {
+    private fun checkPreFilterUniqueness(preFilterBeans: Map<String, List<Any>>) {
+        preFilterBeans.forEach {
             check(it.value.size == 1) { "Pre-Filters have to be unique per groupId" }
         }
     }
