@@ -147,10 +147,10 @@ class KafkaConsumer {
                         { receiverRecords ->
                             when (kafkaListenerMeta.handler) {
                                 is SingleHandler -> {
-                                    processSingle(kafkaListenerMeta, receiverRecords).toFlowable().map { receiverRecords }
+                                    processSingle(kafkaListenerMeta, receiverRecords).toFlowable<List<ReceiverRecord<*, *>>>().defaultIfEmpty(receiverRecords)
                                 }
                                 is BatchHandler -> {
-                                    processBatch(kafkaListenerMeta, receiverRecords).toFlowable().map { receiverRecords }
+                                    processBatch(kafkaListenerMeta, receiverRecords).toFlowable<List<ReceiverRecord<*, *>>>().defaultIfEmpty(receiverRecords)
                                 }
                                 else -> {
                                     throw IllegalStateException("Unknown handler type: ${kafkaListenerMeta.handler.javaClass}")
@@ -208,7 +208,7 @@ class KafkaConsumer {
     private fun <K, V> processSingle(
         kafkaListenerMeta: KafkaListenerMeta<K, V>,
         receiverRecords: MutableList<ReceiverRecord<Bytes, Bytes>>
-    ): Single<List<ReceiverRecord<*, *>>> {
+    ): Completable {
         return Single.defer {
             Flowable.fromIterable(receiverRecords)
                     .filter { receiverRecord -> preFilterMessage(kafkaListenerMeta, receiverRecord) }
@@ -230,12 +230,13 @@ class KafkaConsumer {
         }
                 .doOnError { error -> log.error("Failed to process batch", error) }
                 .retryWhen { receiverRecord -> receiverRecord.delay(kafkaListenerMeta.retryBackoffMillis!!, TimeUnit.MILLISECONDS) }
+                .ignoreElement()
     }
 
     private fun <K, V> processBatch(
         kafkaListenerMeta: KafkaListenerMeta<K, V>,
         receiverRecords: MutableList<out ReceiverRecord<Bytes, Bytes>>
-    ): Single<List<ReceiverRecord<*, *>>> {
+    ): Completable {
         return Single.defer {
             Flowable.fromIterable(receiverRecords)
                     .filter { receiverRecord -> preFilterMessage(kafkaListenerMeta, receiverRecord) }
@@ -261,6 +262,7 @@ class KafkaConsumer {
         }
                 .doOnError { error -> log.error("Failed to process batch", error) }
                 .retryWhen { receiverRecord -> receiverRecord.delay(kafkaListenerMeta.retryBackoffMillis!!, TimeUnit.MILLISECONDS) }
+                .ignoreElement()
     }
 
     private fun <K, V> preFilterMessage(kafkaListenerMeta: KafkaListenerMeta<K, V>, receiverRecord: ReceiverRecord<Bytes, Bytes>): Boolean {

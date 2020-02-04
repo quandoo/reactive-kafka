@@ -4,7 +4,7 @@ and provides a similar usability like [Spring Kafka](https://spring.io/projects/
 
 ## Dependency
 ```gradle
-implementation("com.quandoo.lib:reactive-kafka:1.2.0")
+implementation("com.quandoo.lib:reactive-kafka:1.2.1")
 ```
 
 ## Usage
