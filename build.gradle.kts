@@ -161,6 +161,11 @@ publishing {
                         name.set("Emir Dizdarevic")
                         email.set("account.oss@quandoo.com")
                     }
+                    developer {
+                        id.set("2")
+                        name.set("Bruno de Queiroz Silva")
+                        email.set("account.oss@quandoo.com")
+                    }
                 }
             }
         }
