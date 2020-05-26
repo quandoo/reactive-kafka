@@ -10,7 +10,7 @@ plugins {
     id("org.jetbrains.dokka") version "0.9.16"
     id("net.researchgate.release") version "2.6.0"
     id("com.github.hierynomus.license") version "0.15.0"
-    id("org.hibernate.build.maven-repo-auth") version "3.0.2"
+    id("org.hibernate.build.maven-repo-auth") version "3.0.0"
 }
 
 repositories {
