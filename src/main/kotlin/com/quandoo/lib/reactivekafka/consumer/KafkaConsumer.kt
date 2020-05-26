@@ -26,6 +26,7 @@ import io.reactivex.Single
 import io.reactivex.subscribers.DisposableSubscriber
 import java.time.Duration
 import java.util.concurrent.TimeUnit
+import java.util.concurrent.atomic.AtomicReference
 import org.apache.kafka.clients.consumer.ConsumerConfig
 import org.apache.kafka.clients.consumer.ConsumerRecord
 import org.apache.kafka.clients.consumer.KafkaConsumer
@@ -96,49 +97,61 @@ class KafkaConsumer(private val kafkaProperties: KafkaProperties, listeners: Lis
     }
 
     private fun <K, V> startConsumer(kafkaListenerProperties: KafkaListenerProperties<K, V>) {
-        return Flowable.defer { Flowable.just(KafkaReceiver.create(createReceiverOptions(kafkaListenerProperties))) }
-            .flatMap { receiver ->
-                RxJava2Adapter.fluxToFlowable(receiver.receive().bufferTimeout(kafkaListenerProperties.batchSize, Duration.ofMillis(kafkaListenerProperties.batchWaitMillis), kafkaListenerProperties.scheduler))
-                    .flatMap({ receiverRecords ->
-                        when (kafkaListenerProperties.handler) {
-                            is SingleHandler -> {
-                                processSingle(kafkaListenerProperties, receiverRecords).toFlowable<List<ReceiverRecord<*, *>>>().defaultIfEmpty(receiverRecords)
-                            }
-                            is BatchHandler -> {
-                                processBatch(kafkaListenerProperties, receiverRecords).toFlowable<List<ReceiverRecord<*, *>>>().defaultIfEmpty(receiverRecords)
-                            }
-                            else -> {
-                                throw IllegalStateException("Unknown handler type: ${kafkaListenerProperties.handler.javaClass}")
-                            }
-                        }
-                            .observeOn(io.reactivex.schedulers.Schedulers.from { r -> kafkaListenerProperties.scheduler.schedule(r) })
-                            .concatMap(
-                                { innerReceiverRecords ->
-                                    if (innerReceiverRecords.isNotEmpty()) {
-                                        // All offsets need to be acknowledged
-                                        innerReceiverRecords.forEach { it.receiverOffset().acknowledge() }
-
-                                        val lastReceiverRecordPerTopicPartition = innerReceiverRecords.map { it.receiverOffset().topicPartition() to it }.toMap()
-                                        Flowable.fromIterable(lastReceiverRecordPerTopicPartition.values)
-                                            .flatMap { receiverRecord ->
-                                                RxJava2Adapter.monoToCompletable(receiverRecord.receiverOffset().commit()).toSingle { receiverRecord }.toFlowable()
-                                            }
-                                            .toList()
-                                            .toFlowable()
-                                            .map { innerReceiverRecords }
-                                    } else {
-                                        Flowable.just(innerReceiverRecords)
+        Flowable.just(AtomicReference(kafkaListenerProperties))
+            .flatMap { kafkaListenerPropertiesInner ->
+                Flowable.just(KafkaReceiver.create(createReceiverOptions(kafkaListenerProperties)))
+                    .flatMap { receiver ->
+                        RxJava2Adapter.fluxToFlowable(receiver.receive().bufferTimeout(kafkaListenerProperties.batchSize, Duration.ofMillis(kafkaListenerProperties.batchWaitMillis), kafkaListenerProperties.scheduler))
+                            .flatMap({ receiverRecords ->
+                                when (kafkaListenerProperties.handler) {
+                                    is SingleHandler -> {
+                                        processSingle(kafkaListenerProperties, receiverRecords).toFlowable<List<ReceiverRecord<*, *>>>().defaultIfEmpty(receiverRecords)
                                     }
-                                },
+                                    is BatchHandler -> {
+                                        processBatch(kafkaListenerProperties, receiverRecords).toFlowable<List<ReceiverRecord<*, *>>>().defaultIfEmpty(receiverRecords)
+                                    }
+                                    else -> {
+                                        throw IllegalStateException("Unknown handler type: ${kafkaListenerProperties.handler.javaClass}")
+                                    }
+                                }
+                                    .observeOn(io.reactivex.schedulers.Schedulers.from { r -> kafkaListenerProperties.scheduler.schedule(r) })
+                                    .concatMap(
+                                        { innerReceiverRecords ->
+                                            if (innerReceiverRecords.isNotEmpty()) {
+                                                // All offsets need to be acknowledged
+                                                innerReceiverRecords.forEach { it.receiverOffset().acknowledge() }
+
+                                                val lastReceiverRecordPerTopicPartition = innerReceiverRecords.map { it.receiverOffset().topicPartition() to it }.toMap()
+                                                Flowable.fromIterable(lastReceiverRecordPerTopicPartition.values)
+                                                    .flatMap { receiverRecord ->
+                                                        RxJava2Adapter.monoToCompletable(receiverRecord.receiverOffset().commit()).toSingle { receiverRecord }.toFlowable()
+                                                    }
+                                                    .toList()
+                                                    .toFlowable()
+                                                    .map { innerReceiverRecords }
+                                            } else {
+                                                Flowable.just(innerReceiverRecords)
+                                            }
+                                        },
+                                        1
+                                    )
+                            },
                                 1
                             )
-                    },
-                        1
-                    )
+                    }
+                    .observeOn(io.reactivex.schedulers.Schedulers.from { r -> kafkaListenerProperties.scheduler.schedule(r) })
+                    .doOnError {
+                        val previous = kafkaListenerPropertiesInner.get()
+                        previous.scheduler.dispose()
+                        kafkaListenerPropertiesInner.set(
+                            previous.copy(
+                                scheduler = createScheduler(previous.topics)
+                            )
+                        )
+                    }
+                    .retry()
+                    .subscribeOn(io.reactivex.schedulers.Schedulers.from { r -> kafkaListenerProperties.scheduler.schedule(r) }, true)
             }
-            .observeOn(io.reactivex.schedulers.Schedulers.from { r -> kafkaListenerProperties.scheduler.schedule(r) })
-            .retry()
-            .subscribeOn(io.reactivex.schedulers.Schedulers.from { r -> kafkaListenerProperties.scheduler.schedule(r) }, true)
             .subscribe(
                 object : DisposableSubscriber<List<ReceiverRecord<*, *>>>() {
                     override fun onStart() {
@@ -289,8 +302,12 @@ class KafkaConsumer(private val kafkaProperties: KafkaProperties, listeners: Lis
                 retryBackoffMillis = MoreObjects.firstNonNull(listener.retryBackoffMillis, kafkaProperties.consumer?.retryBackoffMillis) ?: error("retryBackoffMillis mandatory"),
                 partitionAssignmentStrategy = MoreObjects.firstNonNull(listener.partitionAssignmentStrategy, kafkaProperties.consumer?.partitionAssignmentStrategy) ?: error("partitionAssignmentStrategy mandatory"),
                 autoOffsetReset = MoreObjects.firstNonNull(listener.autoOffsetReset, kafkaProperties.consumer?.autoOffsetReset) ?: error("autoOffsetReset mandatory"),
-                scheduler = Schedulers.newSingle("kafka-consumer-${listener.topics}")
+                scheduler = createScheduler(listener.topics)
         )
+    }
+
+    private fun createScheduler(topics: List<String>): Scheduler {
+        return Schedulers.newSingle("kafka-consumer-$topics")
     }
 
     private data class KafkaListenerProperties<K, V>(
