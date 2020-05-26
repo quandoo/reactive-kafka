@@ -23,7 +23,7 @@ kafka:
     group-id: ${spring.application.name}                                                  # Kafka groupId
     parallelism: 1                                                                        # How many parallel consumptions (Default: 1)
     auto-offset-reset: earliest                                                           # Offset reset (Default: latest)
-    batch-size: 10                                                                        # Max batch size (Default: 10)
+    batch-size: 10                                                                        # Max number of messages per one batch (Default: 10)
     partition-assignment-strategy: "org.apache.kafka.clients.consumer.RangeAssignor"      # How to assign partitions (Default: org.apache.kafka.clients.consumer.RangeAssignor)
     batch-wait-millis: 200                                                                # Max waiting time until processing happens if the size wasn't matched (Default: 200)
     retry-backoff-millis: 100                                                             # How long to backoff until retrying again (Default: 100)
