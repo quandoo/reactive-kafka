@@ -135,7 +135,6 @@ class KafkaConsumer(private val kafkaProperties: KafkaProperties, listeners: Lis
                         1
                 )
                 .observeOn(io.reactivex.schedulers.Schedulers.from { r -> kafkaListenerProperties.scheduler.schedule(r) })
-                .retry()
                 .subscribeOn(io.reactivex.schedulers.Schedulers.from { r -> kafkaListenerProperties.scheduler.schedule(r) }, true)
                 .subscribe(
                         object : DisposableSubscriber<List<ReceiverRecord<*, *>>>() {
@@ -149,7 +148,7 @@ class KafkaConsumer(private val kafkaProperties: KafkaProperties, listeners: Lis
                             }
 
                             override fun onError(ex: Throwable) {
-                                log.error("Consumer terminated", ex)
+                                log.error("Consumer throw error", ex)
                             }
 
                             override fun onComplete() {
@@ -287,7 +286,7 @@ class KafkaConsumer(private val kafkaProperties: KafkaProperties, listeners: Lis
                 retryBackoffMillis = MoreObjects.firstNonNull(listener.retryBackoffMillis, kafkaProperties.consumer?.retryBackoffMillis) ?: error("retryBackoffMillis mandatory"),
                 partitionAssignmentStrategy = MoreObjects.firstNonNull(listener.partitionAssignmentStrategy, kafkaProperties.consumer?.partitionAssignmentStrategy) ?: error("partitionAssignmentStrategy mandatory"),
                 autoOffsetReset = MoreObjects.firstNonNull(listener.autoOffsetReset, kafkaProperties.consumer?.autoOffsetReset) ?: error("autoOffsetReset mandatory"),
-                scheduler = Schedulers.newParallel("kafka-consumer-${listener.topics}", parallelism)
+                scheduler = Schedulers.newSingle("kafka-consumer-${listener.topics}")
         )
     }
 
