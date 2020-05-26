@@ -135,6 +135,7 @@ class KafkaConsumer(private val kafkaProperties: KafkaProperties, listeners: Lis
                         1
                 )
                 .observeOn(io.reactivex.schedulers.Schedulers.from { r -> kafkaListenerProperties.scheduler.schedule(r) })
+                .retry()
                 .subscribeOn(io.reactivex.schedulers.Schedulers.from { r -> kafkaListenerProperties.scheduler.schedule(r) }, true)
                 .subscribe(
                         object : DisposableSubscriber<List<ReceiverRecord<*, *>>>() {
