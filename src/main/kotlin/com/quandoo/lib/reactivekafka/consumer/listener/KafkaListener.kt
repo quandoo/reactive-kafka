@@ -33,6 +33,8 @@ annotation class KafkaListener(
     val maxPoolIntervalMillis: Int = -1,
     val batchWaitMillis: Long = -1L,
     val retryBackoffMillis: Long = -1L,
+    val heartBeatIntervalMillis: Int = -1,
+    val sessionTimeoutMillis: Int = -1,
     val partitionAssignmentStrategy: String = "",
     val autoOffsetReset: String = ""
 )

@@ -65,16 +65,18 @@ class KafkaConsumer(private val kafkaProperties: KafkaProperties, listeners: Lis
 
     private fun <K, V> createReceiverOptions(kafkaListenerProperties: KafkaListenerProperties<K, V>): ReceiverOptions<Bytes, Bytes> {
         val consumerProps = HashMap<String, Any>()
-                .also {
-                    it[ConsumerConfig.GROUP_ID_CONFIG] = kafkaListenerProperties.groupId
-                    it[ConsumerConfig.AUTO_OFFSET_RESET_CONFIG] = kafkaListenerProperties.autoOffsetReset
-                    it[ConsumerConfig.MAX_POLL_RECORDS_CONFIG] = kafkaListenerProperties.batchSize
-                    it[ConsumerConfig.MAX_POLL_INTERVAL_MS_CONFIG] = kafkaListenerProperties.maxPoolIntervalMillis
-                    it[ConsumerConfig.PARTITION_ASSIGNMENT_STRATEGY_CONFIG] = kafkaListenerProperties.partitionAssignmentStrategy
-                }
-                .let { KafkaConfigHelper.populateCommonConfig(kafkaProperties, it) }
-                .let { KafkaConfigHelper.populateSslConfig(kafkaProperties, it) }
-                .let { KafkaConfigHelper.populateSaslConfig(kafkaProperties, it) }
+            .also {
+                it[ConsumerConfig.GROUP_ID_CONFIG] = kafkaListenerProperties.groupId
+                it[ConsumerConfig.AUTO_OFFSET_RESET_CONFIG] = kafkaListenerProperties.autoOffsetReset
+                it[ConsumerConfig.MAX_POLL_RECORDS_CONFIG] = kafkaListenerProperties.batchSize
+                it[ConsumerConfig.MAX_POLL_INTERVAL_MS_CONFIG] = kafkaListenerProperties.maxPoolIntervalMillis
+                it[ConsumerConfig.HEARTBEAT_INTERVAL_MS_CONFIG] = kafkaListenerProperties.heartBeatIntervalMillis
+                it[ConsumerConfig.SESSION_TIMEOUT_MS_CONFIG] = kafkaListenerProperties.sessionTimeoutMillis
+                it[ConsumerConfig.PARTITION_ASSIGNMENT_STRATEGY_CONFIG] = kafkaListenerProperties.partitionAssignmentStrategy
+            }
+            .let { KafkaConfigHelper.populateCommonConfig(kafkaProperties, it) }
+            .let { KafkaConfigHelper.populateSslConfig(kafkaProperties, it) }
+            .let { KafkaConfigHelper.populateSaslConfig(kafkaProperties, it) }
 
         return ReceiverOptions.create<Bytes, Bytes>(consumerProps)
                 // Disable automatic commits
@@ -271,23 +273,25 @@ class KafkaConsumer(private val kafkaProperties: KafkaProperties, listeners: Lis
     private fun <K, V> mergeConfiguration(listener: KafkaListenerMeta<K, V>, kafkaProperties: KafkaProperties): KafkaListenerProperties<K, V> {
         val parallelism = MoreObjects.firstNonNull(listener.parallelism, kafkaProperties.consumer?.parallelism) ?: error("parallelism mandatory")
         return KafkaListenerProperties(
-                handler = listener.handler,
-                topics = listener.topics,
-                keyClass = listener.keyClass,
-                valueClass = listener.valueClass,
-                keyDeserializer = listener.keyDeserializer,
-                valueDeserializer = listener.valueDeserializer,
-                preFilter = listener.preFilter,
-                filter = listener.filter,
-                groupId = MoreObjects.firstNonNull(listener.groupId, kafkaProperties.consumer?.groupId) ?: error("groupId mandatory"),
-                batchSize = MoreObjects.firstNonNull(listener.batchSize, kafkaProperties.consumer?.batchSize) ?: error("batchSize mandatory"),
-                parallelism = parallelism,
-                maxPoolIntervalMillis = MoreObjects.firstNonNull(listener.maxPoolIntervalMillis, kafkaProperties.consumer?.maxPoolIntervalMillis) ?: error("maxPoolIntervalMillis mandatory"),
-                batchWaitMillis = MoreObjects.firstNonNull(listener.batchWaitMillis, kafkaProperties.consumer?.batchWaitMillis) ?: error("batchWaitMillis mandatory"),
-                retryBackoffMillis = MoreObjects.firstNonNull(listener.retryBackoffMillis, kafkaProperties.consumer?.retryBackoffMillis) ?: error("retryBackoffMillis mandatory"),
-                partitionAssignmentStrategy = MoreObjects.firstNonNull(listener.partitionAssignmentStrategy, kafkaProperties.consumer?.partitionAssignmentStrategy) ?: error("partitionAssignmentStrategy mandatory"),
-                autoOffsetReset = MoreObjects.firstNonNull(listener.autoOffsetReset, kafkaProperties.consumer?.autoOffsetReset) ?: error("autoOffsetReset mandatory"),
-                scheduler = Schedulers.newSingle("kafka-consumer-${listener.topics}")
+            handler = listener.handler,
+            topics = listener.topics,
+            keyClass = listener.keyClass,
+            valueClass = listener.valueClass,
+            keyDeserializer = listener.keyDeserializer,
+            valueDeserializer = listener.valueDeserializer,
+            preFilter = listener.preFilter,
+            filter = listener.filter,
+            groupId = MoreObjects.firstNonNull(listener.groupId, kafkaProperties.consumer?.groupId) ?: error("groupId mandatory"),
+            batchSize = MoreObjects.firstNonNull(listener.batchSize, kafkaProperties.consumer?.batchSize) ?: error("batchSize mandatory"),
+            parallelism = parallelism,
+            maxPoolIntervalMillis = MoreObjects.firstNonNull(listener.maxPoolIntervalMillis, kafkaProperties.consumer?.maxPoolIntervalMillis) ?: error("maxPoolIntervalMillis mandatory"),
+            batchWaitMillis = MoreObjects.firstNonNull(listener.batchWaitMillis, kafkaProperties.consumer?.batchWaitMillis) ?: error("batchWaitMillis mandatory"),
+            retryBackoffMillis = MoreObjects.firstNonNull(listener.retryBackoffMillis, kafkaProperties.consumer?.retryBackoffMillis) ?: error("retryBackoffMillis mandatory"),
+            partitionAssignmentStrategy = MoreObjects.firstNonNull(listener.partitionAssignmentStrategy, kafkaProperties.consumer?.partitionAssignmentStrategy) ?: error("partitionAssignmentStrategy mandatory"),
+            autoOffsetReset = MoreObjects.firstNonNull(listener.autoOffsetReset, kafkaProperties.consumer?.autoOffsetReset) ?: error("autoOffsetReset mandatory"),
+            scheduler = Schedulers.newSingle("kafka-consumer-${listener.topics}"),
+            heartBeatIntervalMillis = MoreObjects.firstNonNull(listener.heartBeatIntervalMillis, kafkaProperties.consumer?.heartBeatIntervalMillis) ?: error("heartBeatIntervalMillis mandatory"),
+            sessionTimeoutMillis = MoreObjects.firstNonNull(listener.sessionTimeoutMillis, kafkaProperties.consumer?.sessionTimeoutMillis) ?: error("sessionTimeoutMillis mandatory")
         )
     }
 
@@ -307,6 +311,8 @@ class KafkaConsumer(private val kafkaProperties: KafkaProperties, listeners: Lis
         val batchWaitMillis: Long,
         val retryBackoffMillis: Long,
         val partitionAssignmentStrategy: String,
+        val heartBeatIntervalMillis: Int,
+        val sessionTimeoutMillis: Int,
         val autoOffsetReset: String,
         val scheduler: Scheduler
     )

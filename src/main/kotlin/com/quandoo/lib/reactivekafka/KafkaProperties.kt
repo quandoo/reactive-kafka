@@ -42,6 +42,8 @@ class KafkaProperties {
         var maxPoolIntervalMillis = 300000
         var batchWaitMillis = 200L
         var retryBackoffMillis = 100L
+        var heartBeatIntervalMillis = 3000
+        var sessionTimeoutMillis = 10000
     }
 
     class KafkaProducerProperties {

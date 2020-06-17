@@ -44,5 +44,7 @@ data class KafkaListenerMeta<K, V>(
     val batchWaitMillis: Long? = null,
     val retryBackoffMillis: Long? = null,
     val partitionAssignmentStrategy: String? = null,
-    val autoOffsetReset: String? = null
+    val autoOffsetReset: String? = null,
+    val heartBeatIntervalMillis: Int? = null,
+    val sessionTimeoutMillis: Int? = null
 )

@@ -104,6 +104,8 @@ class AnnotationBasedKafkaListenerFinder(
                             maxPoolIntervalMillis = annotation.maxPoolIntervalMillis.let { if (it < 0) null else it },
                             batchWaitMillis = annotation.batchWaitMillis.let { if (it < 0) null else it },
                             retryBackoffMillis = annotation.retryBackoffMillis.let { if (it < 0) null else it },
+                            heartBeatIntervalMillis = annotation.heartBeatIntervalMillis.let { if (it < 0) null else it },
+                            sessionTimeoutMillis = annotation.sessionTimeoutMillis.let { if (it < 0) null else it },
                             partitionAssignmentStrategy = StringUtils.trimToNull(embeddedValueResolver.resolveStringValue(annotation.partitionAssignmentStrategy)),
                             autoOffsetReset = StringUtils.trimToNull(embeddedValueResolver.resolveStringValue(annotation.autoOffsetReset))
                     )
