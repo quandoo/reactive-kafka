@@ -102,7 +102,7 @@ class AnnotationBasedKafkaListenerFinder(
                             batchSize = annotation.batchSize.let { if (it < 0) null else it },
                             parallelism = annotation.parallelism.let { if (it < 0) null else it },
                             maxPoolIntervalMillis = annotation.maxPoolIntervalMillis.let { if (it < 0) null else it },
-                            batchWaitMillis = annotation.batchWaitMillis.let { if (it < 0) null else it },
+                            commitInterval = annotation.commitInterval.let { if (it < 0) null else it },
                             retryBackoffMillis = annotation.retryBackoffMillis.let { if (it < 0) null else it },
                             heartBeatIntervalMillis = annotation.heartBeatIntervalMillis.let { if (it < 0) null else it },
                             sessionTimeoutMillis = annotation.sessionTimeoutMillis.let { if (it < 0) null else it },

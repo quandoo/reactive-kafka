@@ -39,7 +39,6 @@ import reactor.core.scheduler.Scheduler
 import reactor.core.scheduler.Schedulers
 import reactor.kafka.receiver.KafkaReceiver
 import reactor.kafka.receiver.ReceiverOptions
-import reactor.kafka.receiver.ReceiverRecord
 
 /**
  * @author Emir Dizdarevic
@@ -52,12 +51,13 @@ class KafkaConsumer(private val kafkaProperties: KafkaProperties, listeners: Lis
     }
 
     private val kafkaListenerProperties: List<KafkaListenerProperties<*, *>> = (listeners
-            .takeIf { it.isNotEmpty() } ?: error("At least one consumer has to be defined"))
-            .groupBy { it.groupId }
-            .flatMap { entry ->
-                check(entry.value.map { it.valueClass }.size == entry.value.map { it.valueClass }.toSet().size) { "Only one listener per groupID and Entity can be defined" }
-                entry.value.map { mergeConfiguration(it, kafkaProperties) }
-            }
+        .takeIf { it.isNotEmpty() } ?: error("At least one consumer has to be defined"))
+        .groupBy { it.groupId }
+        .flatMap { entry ->
+            check(entry.value.map { it.valueClass }.size == entry.value.map { it.valueClass }
+                .toSet().size) { "Only one listener per groupID and Entity can be defined" }
+            entry.value.map { mergeConfiguration(it, kafkaProperties) }
+        }
 
     fun start() {
         startConsumers()
@@ -79,13 +79,12 @@ class KafkaConsumer(private val kafkaProperties: KafkaProperties, listeners: Lis
             .let { KafkaConfigHelper.populateSaslConfig(kafkaProperties, it) }
 
         return ReceiverOptions.create<Bytes, Bytes>(consumerProps)
-                // Disable automatic commits
-                .commitInterval(Duration.ZERO)
-                .commitBatchSize(0)
-                .withKeyDeserializer(BytesDeserializer())
-                .withValueDeserializer(BytesDeserializer())
-                .subscription(kafkaListenerProperties.topics)
-                .schedulerSupplier { kafkaListenerProperties.scheduler }
+            .commitInterval(Duration.ofMillis(kafkaListenerProperties.commitInterval))
+            .commitBatchSize(kafkaListenerProperties.batchSize)
+            .withKeyDeserializer(BytesDeserializer())
+            .withValueDeserializer(BytesDeserializer())
+            .subscription(kafkaListenerProperties.topics)
+            .schedulerSupplier { kafkaListenerProperties.scheduler }
     }
 
     @SuppressWarnings("unchecked")
@@ -99,174 +98,155 @@ class KafkaConsumer(private val kafkaProperties: KafkaProperties, listeners: Lis
 
     private fun <K, V> startConsumer(kafkaListenerProperties: KafkaListenerProperties<K, V>) {
         val receiver = KafkaReceiver.create(createReceiverOptions(kafkaListenerProperties))
-        Flowable.defer { RxJava2Adapter.fluxToFlowable(receiver.receive().bufferTimeout(kafkaListenerProperties.batchSize, Duration.ofMillis(kafkaListenerProperties.batchWaitMillis), kafkaListenerProperties.scheduler)) }
-                .flatMap({ receiverRecords ->
-                            when (kafkaListenerProperties.handler) {
-                                is SingleHandler -> {
-                                    processSingle(kafkaListenerProperties, receiverRecords).toFlowable<List<ReceiverRecord<*, *>>>().defaultIfEmpty(receiverRecords)
-                                }
-                                is BatchHandler -> {
-                                    processBatch(kafkaListenerProperties, receiverRecords).toFlowable<List<ReceiverRecord<*, *>>>().defaultIfEmpty(receiverRecords)
-                                }
-                                else -> {
-                                    throw IllegalStateException("Unknown handler type: ${kafkaListenerProperties.handler.javaClass}")
-                                }
-                            }
-                                .observeOn(io.reactivex.schedulers.Schedulers.from { r -> kafkaListenerProperties.scheduler.schedule(r) })
-                                .concatMap(
-                                        { innerReceiverRecords ->
-                                            if (innerReceiverRecords.isNotEmpty()) {
-                                                // All offsets need to be acknowledged
-                                                innerReceiverRecords.forEach { it.receiverOffset().acknowledge() }
-
-                                                val lastReceiverRecordPerTopicPartition = innerReceiverRecords.map { it.receiverOffset().topicPartition() to it }.toMap()
-                                                Flowable.fromIterable(lastReceiverRecordPerTopicPartition.values)
-                                                        .flatMap { receiverRecord ->
-                                                            RxJava2Adapter.monoToCompletable(receiverRecord.receiverOffset().commit()).toSingle { receiverRecord }.toFlowable()
-                                                        }
-                                                        .toList()
-                                                        .toFlowable()
-                                                        .map { innerReceiverRecords }
-                                            } else {
-                                                Flowable.just(innerReceiverRecords)
-                                            }
-                                        },
-                                        1
-                                )
-                        },
-                        1
-                )
-                .observeOn(io.reactivex.schedulers.Schedulers.from { r -> kafkaListenerProperties.scheduler.schedule(r) })
-                .retry()
-                .subscribeOn(io.reactivex.schedulers.Schedulers.from { r -> kafkaListenerProperties.scheduler.schedule(r) }, true)
-                .subscribe(
-                        object : DisposableSubscriber<List<ReceiverRecord<*, *>>>() {
-                            override fun onStart() {
-                                request(1)
-                            }
-
-                            override fun onNext(receiverRecord: List<ReceiverRecord<*, *>>) {
-                                receiverRecord.forEach { logMessage("Message processed", it) }
-                                request(1)
-                            }
-
-                            override fun onError(ex: Throwable) {
-                                log.error("Consumer throw error", ex)
-                            }
-
-                            override fun onComplete() {
-                                log.error("Consumer terminated")
-                            }
+        Flowable.defer { RxJava2Adapter.fluxToFlowable(receiver.receiveAutoAck()) }
+            .map { RxJava2Adapter.fluxToFlowable(it) }
+            .flatMap(
+                { consumerRecords ->
+                    when (kafkaListenerProperties.handler) {
+                        is SingleHandler -> {
+                            processSingle(kafkaListenerProperties, consumerRecords)
                         }
-                )
+                        is BatchHandler -> {
+                            processBatch(kafkaListenerProperties, consumerRecords)
+                        }
+                        else -> {
+                            throw IllegalStateException("Unknown handler type: ${kafkaListenerProperties.handler.javaClass}")
+                        }
+                    }
+                        .observeOn(io.reactivex.schedulers.Schedulers.from { r -> kafkaListenerProperties.scheduler.schedule(r) })
+                },
+                1
+            )
+            .observeOn(io.reactivex.schedulers.Schedulers.from { r -> kafkaListenerProperties.scheduler.schedule(r) })
+            .doOnError { error -> log.error("Failed to kafka flux", error) }
+            .retry()
+            .subscribeOn(io.reactivex.schedulers.Schedulers.from { r -> kafkaListenerProperties.scheduler.schedule(r) }, true)
+            .subscribe(
+                object : DisposableSubscriber<List<ConsumerRecord<*, *>>>() {
+                    override fun onStart() {
+                        request(1)
+                    }
+
+                    override fun onNext(consumerRecords: List<ConsumerRecord<*, *>>) {
+                        consumerRecords.forEach { logMessage("Message processed", it) }
+                        request(1)
+                    }
+
+                    override fun onError(ex: Throwable) {
+                        log.error("Consumer throw error", ex)
+                    }
+
+                    override fun onComplete() {
+                        log.error("Consumer terminated")
+                    }
+                }
+            )
     }
 
     private fun <K, V> processSingle(
         kafkaListenerProperties: KafkaListenerProperties<K, V>,
-        receiverRecords: MutableList<ReceiverRecord<Bytes, Bytes>>
-    ): Completable {
-        return Single.defer {
-            Flowable.fromIterable(receiverRecords)
-                    .filter { receiverRecord -> preFilterMessage(kafkaListenerProperties, receiverRecord) }
-                    .map { serializeConsumerRecord(kafkaListenerProperties, it) }
-                    .filter { receiverRecord -> filterMessage(kafkaListenerProperties, receiverRecord) }
-                    .concatMapEager { receiverRecord ->
-                        Flowable.defer { Flowable.just((kafkaListenerProperties.handler as SingleHandler).apply(receiverRecord)) }
-                                .concatMapEager { result ->
-                                    when (result) {
-                                        is Mono<*> -> RxJava2Adapter.monoToCompletable(result).toSingleDefault(receiverRecord).toFlowable()
-                                        is Completable -> result.toSingleDefault(1).toFlowable().map { receiverRecord }
-                                        else -> Flowable.error<ReceiverRecord<Any, Any>>(IllegalStateException("Unknown return type ${result.javaClass}"))
-                                    }
-                                }
-                                .doOnError { error -> log.error("Failed to process kafka message", error) }
-                                .retryWhen { it.delay(kafkaListenerProperties.retryBackoffMillis, TimeUnit.MILLISECONDS) }
+        consumerRecords: Flowable<ConsumerRecord<Bytes, Bytes>>
+    ): Flowable<List<ConsumerRecord<*, *>>> {
+        return consumerRecords
+            .cache()
+            .filter { consumerRecord -> preFilterMessage(kafkaListenerProperties, consumerRecord) }
+            .map { serializeConsumerRecord(kafkaListenerProperties, it) }
+            .filter { consumerRecord -> filterMessage(kafkaListenerProperties, consumerRecord) }
+            .concatMapEager { consumerRecord ->
+                Flowable.just((kafkaListenerProperties.handler as SingleHandler).apply(consumerRecord))
+                    .concatMapEager { result ->
+                        when (result) {
+                            is Mono<*> -> RxJava2Adapter.monoToCompletable(result).toSingleDefault(consumerRecord).toFlowable()
+                            is Completable -> result.toSingleDefault(1).toFlowable().map { consumerRecord }
+                            else -> Flowable.error<ConsumerRecord<Any, Any>>(IllegalStateException("Unknown return type ${result.javaClass}"))
+                        }
                     }
-                    .toList()
-        }
-                .doOnError { error -> log.error("Failed to process batch", error) }
-                .retryWhen { it.delay(kafkaListenerProperties.retryBackoffMillis, TimeUnit.MILLISECONDS) }
-                .ignoreElement()
+                    .doOnError { error -> log.error("Failed to process kafka message", error) }
+                    .retryWhen { it.delay(kafkaListenerProperties.retryBackoffMillis, TimeUnit.MILLISECONDS) }
+            }
+            .toList()
+            .toFlowable()
+            .doOnError { error -> log.error("Failed to process batch", error) }
+            .retryWhen { it.delay(kafkaListenerProperties.retryBackoffMillis, TimeUnit.MILLISECONDS) }
     }
 
     private fun <K, V> processBatch(
         kafkaListenerProperties: KafkaListenerProperties<K, V>,
-        receiverRecords: MutableList<out ReceiverRecord<Bytes, Bytes>>
-    ): Completable {
-        return Single.defer {
-            Flowable.fromIterable(receiverRecords)
-                    .filter { receiverRecord -> preFilterMessage(kafkaListenerProperties, receiverRecord) }
-                    .map { serializeConsumerRecord(kafkaListenerProperties, it) }
-                    .filter { receiverRecord -> filterMessage(kafkaListenerProperties, receiverRecord) }
-                    .toList()
-                    .flatMap { innerReceiverRecords ->
-                        if (innerReceiverRecords.isNotEmpty()) {
-                            Single.defer { Single.just((kafkaListenerProperties.handler as BatchHandler).apply(innerReceiverRecords)) }
-                                    .flatMap { result ->
-                                        when (result) {
-                                            is Mono<*> -> RxJava2Adapter.monoToCompletable(result).toSingleDefault(innerReceiverRecords)
-                                            is Completable -> result.toSingleDefault(1).map { innerReceiverRecords }
-                                            else -> Single.error<List<ReceiverRecord<Any, Any>>>(IllegalStateException("Unknown return type ${result.javaClass}"))
-                                        }
-                                    }
-                                    .doOnError { error -> log.error("Failed to process kafka message", error) }
-                                    .retryWhen { it.delay(kafkaListenerProperties.retryBackoffMillis, TimeUnit.MILLISECONDS) }
-                        } else {
-                            Single.just(emptyList())
+        consumerRecords: Flowable<out ConsumerRecord<Bytes, Bytes>>
+    ): Flowable<List<ConsumerRecord<*, *>>> {
+        return consumerRecords
+            .cache()
+            .filter { consumerRecord -> preFilterMessage(kafkaListenerProperties, consumerRecord) }
+            .map { serializeConsumerRecord(kafkaListenerProperties, it) }
+            .filter { consumerRecord -> filterMessage(kafkaListenerProperties, consumerRecord) }
+            .toList()
+            .flatMap { innerConsumerRecords ->
+                if (innerConsumerRecords.isNotEmpty()) {
+                    Single.just((kafkaListenerProperties.handler as BatchHandler).apply(innerConsumerRecords))
+                        .flatMap { result ->
+                            when (result) {
+                                is Mono<*> -> RxJava2Adapter.monoToCompletable(result).toSingleDefault(innerConsumerRecords)
+                                is Completable -> result.toSingleDefault(1).map { innerConsumerRecords }
+                                else -> Single.error<List<ConsumerRecord<Any, Any>>>(IllegalStateException("Unknown return type ${result.javaClass}"))
+                            }
                         }
-                    }
-        }
-                .doOnError { error -> log.error("Failed to process batch", error) }
-                .retryWhen { it.delay(kafkaListenerProperties.retryBackoffMillis, TimeUnit.MILLISECONDS) }
-                .ignoreElement()
+                        .doOnError { error -> log.error("Failed to process kafka message", error) }
+                        .retryWhen { it.delay(kafkaListenerProperties.retryBackoffMillis, TimeUnit.MILLISECONDS) }
+                } else {
+                    Single.just(emptyList())
+                }
+            }
+            .toFlowable()
+            .doOnError { error -> log.error("Failed to process batch", error) }
+            .retryWhen { it.delay(kafkaListenerProperties.retryBackoffMillis, TimeUnit.MILLISECONDS) }
     }
 
-    private fun <K, V> preFilterMessage(kafkaListenerProperties: KafkaListenerProperties<K, V>, receiverRecord: ReceiverRecord<Bytes, Bytes>): Boolean {
-        val pass = kafkaListenerProperties.preFilter.apply(receiverRecord)
+    private fun <K, V> preFilterMessage(kafkaListenerProperties: KafkaListenerProperties<K, V>, consumerRecord: ConsumerRecord<Bytes, Bytes>): Boolean {
+        val pass = kafkaListenerProperties.preFilter.apply(consumerRecord)
         if (!pass) {
-            logMessage("Messages pre-filtered out", receiverRecord)
+            logMessage("Messages pre-filtered out", consumerRecord)
         }
 
         return pass
     }
 
-    private fun <K, V> filterMessage(kafkaListenerProperties: KafkaListenerProperties<K, V>, receiverRecord: ReceiverRecord<K?, V?>): Boolean {
-        val pass = kafkaListenerProperties.filter.apply(receiverRecord)
+    private fun <K, V> filterMessage(kafkaListenerProperties: KafkaListenerProperties<K, V>, consumerRecord: ConsumerRecord<K?, V?>): Boolean {
+        val pass = kafkaListenerProperties.filter.apply(consumerRecord)
         if (!pass) {
-            logMessage("Messages filtered out", receiverRecord)
+            logMessage("Messages filtered out", consumerRecord)
         }
 
         return pass
     }
 
-    private fun <K, V> serializeConsumerRecord(kafkaListenerProperties: KafkaListenerProperties<K, V>, originalReceiverRecord: ReceiverRecord<Bytes, Bytes>): ReceiverRecord<K?, V?> {
-        val key = originalReceiverRecord.key()?.let { kafkaListenerProperties.keyDeserializer.deserialize(originalReceiverRecord.topic(), it.get()) }
-        val value = originalReceiverRecord.value()?.let { kafkaListenerProperties.valueDeserializer.deserialize(originalReceiverRecord.topic(), it.get()) }
+    private fun <K, V> serializeConsumerRecord(
+        kafkaListenerProperties: KafkaListenerProperties<K, V>,
+        originalConsumerRecord: ConsumerRecord<Bytes, Bytes>
+    ): ConsumerRecord<K?, V?> {
+        val key = originalConsumerRecord.key()?.let { kafkaListenerProperties.keyDeserializer.deserialize(originalConsumerRecord.topic(), it.get()) }
+        val value = originalConsumerRecord.value()?.let { kafkaListenerProperties.valueDeserializer.deserialize(originalConsumerRecord.topic(), it.get()) }
 
-        return ReceiverRecord(
-                ConsumerRecord(
-                        originalReceiverRecord.topic(),
-                        originalReceiverRecord.partition(),
-                        originalReceiverRecord.offset(),
-                        originalReceiverRecord.timestamp(),
-                        originalReceiverRecord.timestampType(),
-                        originalReceiverRecord.checksum(),
-                        originalReceiverRecord.serializedKeySize(),
-                        originalReceiverRecord.serializedValueSize(),
-                        key,
-                        value
-                ),
-                originalReceiverRecord.receiverOffset()
+        return ConsumerRecord(
+            originalConsumerRecord.topic(),
+            originalConsumerRecord.partition(),
+            originalConsumerRecord.offset(),
+            originalConsumerRecord.timestamp(),
+            originalConsumerRecord.timestampType(),
+            originalConsumerRecord.checksum(),
+            originalConsumerRecord.serializedKeySize(),
+            originalConsumerRecord.serializedValueSize(),
+            key,
+            value
         )
     }
 
-    private fun logMessage(prefix: String, receiverRecord: ReceiverRecord<*, *>) {
+    private fun logMessage(prefix: String, consumerRecord: ConsumerRecord<*, *>) {
         log.debug(
-                "$prefix.\nTopic: {}, Partition: {}, Offset: {}, Headers: {}",
-                receiverRecord.receiverOffset().topicPartition().topic(),
-                receiverRecord.receiverOffset().topicPartition().partition(),
-                receiverRecord.receiverOffset().offset(),
-                receiverRecord.headers().map { it.key() + ":" + String(it.value()) }
+            "$prefix.\nTopic: {}, Partition: {}, Offset: {}, Headers: {}",
+            consumerRecord.topic(),
+            consumerRecord.partition(),
+            consumerRecord.offset(),
+            consumerRecord.headers().map { it.key() + ":" + String(it.value()) }
         )
     }
 
@@ -284,14 +264,20 @@ class KafkaConsumer(private val kafkaProperties: KafkaProperties, listeners: Lis
             groupId = MoreObjects.firstNonNull(listener.groupId, kafkaProperties.consumer?.groupId) ?: error("groupId mandatory"),
             batchSize = MoreObjects.firstNonNull(listener.batchSize, kafkaProperties.consumer?.batchSize) ?: error("batchSize mandatory"),
             parallelism = parallelism,
-            maxPoolIntervalMillis = MoreObjects.firstNonNull(listener.maxPoolIntervalMillis, kafkaProperties.consumer?.maxPoolIntervalMillis) ?: error("maxPoolIntervalMillis mandatory"),
-            batchWaitMillis = MoreObjects.firstNonNull(listener.batchWaitMillis, kafkaProperties.consumer?.batchWaitMillis) ?: error("batchWaitMillis mandatory"),
-            retryBackoffMillis = MoreObjects.firstNonNull(listener.retryBackoffMillis, kafkaProperties.consumer?.retryBackoffMillis) ?: error("retryBackoffMillis mandatory"),
-            partitionAssignmentStrategy = MoreObjects.firstNonNull(listener.partitionAssignmentStrategy, kafkaProperties.consumer?.partitionAssignmentStrategy) ?: error("partitionAssignmentStrategy mandatory"),
-            autoOffsetReset = MoreObjects.firstNonNull(listener.autoOffsetReset, kafkaProperties.consumer?.autoOffsetReset) ?: error("autoOffsetReset mandatory"),
+            maxPoolIntervalMillis = MoreObjects.firstNonNull(listener.maxPoolIntervalMillis, kafkaProperties.consumer?.maxPoolIntervalMillis)
+                ?: error("maxPoolIntervalMillis mandatory"),
+            commitInterval = MoreObjects.firstNonNull(listener.commitInterval, kafkaProperties.consumer?.commitInterval) ?: error("commitInterval mandatory"),
+            retryBackoffMillis = MoreObjects.firstNonNull(listener.retryBackoffMillis, kafkaProperties.consumer?.retryBackoffMillis)
+                ?: error("retryBackoffMillis mandatory"),
+            partitionAssignmentStrategy = MoreObjects.firstNonNull(listener.partitionAssignmentStrategy, kafkaProperties.consumer?.partitionAssignmentStrategy)
+                ?: error("partitionAssignmentStrategy mandatory"),
+            autoOffsetReset = MoreObjects.firstNonNull(listener.autoOffsetReset, kafkaProperties.consumer?.autoOffsetReset)
+                ?: error("autoOffsetReset mandatory"),
             scheduler = Schedulers.newSingle("kafka-consumer-${listener.topics}"),
-            heartBeatIntervalMillis = MoreObjects.firstNonNull(listener.heartBeatIntervalMillis, kafkaProperties.consumer?.heartBeatIntervalMillis) ?: error("heartBeatIntervalMillis mandatory"),
-            sessionTimeoutMillis = MoreObjects.firstNonNull(listener.sessionTimeoutMillis, kafkaProperties.consumer?.sessionTimeoutMillis) ?: error("sessionTimeoutMillis mandatory")
+            heartBeatIntervalMillis = MoreObjects.firstNonNull(listener.heartBeatIntervalMillis, kafkaProperties.consumer?.heartBeatIntervalMillis)
+                ?: error("heartBeatIntervalMillis mandatory"),
+            sessionTimeoutMillis = MoreObjects.firstNonNull(listener.sessionTimeoutMillis, kafkaProperties.consumer?.sessionTimeoutMillis)
+                ?: error("sessionTimeoutMillis mandatory")
         )
     }
 
@@ -308,7 +294,7 @@ class KafkaConsumer(private val kafkaProperties: KafkaProperties, listeners: Lis
         val batchSize: Int,
         val parallelism: Int,
         val maxPoolIntervalMillis: Int,
-        val batchWaitMillis: Long,
+        val commitInterval: Long,
         val retryBackoffMillis: Long,
         val partitionAssignmentStrategy: String,
         val heartBeatIntervalMillis: Int,

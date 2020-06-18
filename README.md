@@ -4,7 +4,7 @@ and provides a similar usability like [Spring Kafka](https://spring.io/projects/
 
 ## Dependency
 ```gradle
-implementation("com.quandoo.lib:reactive-kafka:1.2.4")
+implementation("com.quandoo.lib:reactive-kafka:1.3.0")
 ```
 
 ## Usage
@@ -25,7 +25,9 @@ kafka:
     auto-offset-reset: earliest                                                           # Offset reset (Default: latest)
     batch-size: 10                                                                        # Max number of messages per one batch (Default: 10)
     partition-assignment-strategy: "org.apache.kafka.clients.consumer.RangeAssignor"      # How to assign partitions (Default: org.apache.kafka.clients.consumer.RangeAssignor)
-    batch-wait-millis: 200                                                                # Max waiting time until processing happens if the size wasn't matched (Default: 200)
+    commit-interval: 200                                                                  # Max time to wait until the committed messages are synced with kafka (Default: 200)
+    heart-beat-interval-millis: 3000                                                      # Heart-beat period (Default: 3000)
+    session-timeout-millis: 10000                                                         # Session timeout (Default: 10000)
     retry-backoff-millis: 100                                                             # How long to backoff until retrying again (Default: 100)
     max-pool-interval-millis: 300000                                                      # Max interval between 2 pools (Default: 300000)
   producer:

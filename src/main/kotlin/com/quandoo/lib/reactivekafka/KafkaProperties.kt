@@ -40,7 +40,7 @@ class KafkaProperties {
         var partitionAssignmentStrategy = "org.apache.kafka.clients.consumer.RangeAssignor"
         var batchSize = 10
         var maxPoolIntervalMillis = 300000
-        var batchWaitMillis = 200L
+        var commitInterval = 200L
         var retryBackoffMillis = 100L
         var heartBeatIntervalMillis = 3000
         var sessionTimeoutMillis = 10000
