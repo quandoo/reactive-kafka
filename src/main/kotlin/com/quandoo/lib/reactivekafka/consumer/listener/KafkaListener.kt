@@ -32,6 +32,7 @@ annotation class KafkaListener(
     val parallelism: Int = -1,
     val maxPoolIntervalMillis: Int = -1,
     val commitInterval: Long = -1L,
+    val commitBatchSize: Int = -1,
     val retryBackoffMillis: Long = -1L,
     val heartBeatIntervalMillis: Int = -1,
     val sessionTimeoutMillis: Int = -1,

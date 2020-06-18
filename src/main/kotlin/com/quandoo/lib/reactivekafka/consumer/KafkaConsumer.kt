@@ -277,7 +277,10 @@ class KafkaConsumer(private val kafkaProperties: KafkaProperties, listeners: Lis
             heartBeatIntervalMillis = MoreObjects.firstNonNull(listener.heartBeatIntervalMillis, kafkaProperties.consumer?.heartBeatIntervalMillis)
                 ?: error("heartBeatIntervalMillis mandatory"),
             sessionTimeoutMillis = MoreObjects.firstNonNull(listener.sessionTimeoutMillis, kafkaProperties.consumer?.sessionTimeoutMillis)
-                ?: error("sessionTimeoutMillis mandatory")
+                ?: error("sessionTimeoutMillis mandatory"),
+            commitBatchSize = MoreObjects.firstNonNull(listener.commitBatchSize, kafkaProperties.consumer?.commitBatchSize)
+                ?: error("commitBatchSize mandatory")
+
         )
     }
 
@@ -299,6 +302,7 @@ class KafkaConsumer(private val kafkaProperties: KafkaProperties, listeners: Lis
         val partitionAssignmentStrategy: String,
         val heartBeatIntervalMillis: Int,
         val sessionTimeoutMillis: Int,
+        val commitBatchSize: Int,
         val autoOffsetReset: String,
         val scheduler: Scheduler
     )

@@ -46,5 +46,6 @@ data class KafkaListenerMeta<K, V>(
     val partitionAssignmentStrategy: String? = null,
     val autoOffsetReset: String? = null,
     val heartBeatIntervalMillis: Int? = null,
-    val sessionTimeoutMillis: Int? = null
+    val sessionTimeoutMillis: Int? = null,
+    val commitBatchSize: Int? = null
 )

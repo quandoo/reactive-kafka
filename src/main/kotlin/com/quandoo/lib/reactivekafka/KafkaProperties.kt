@@ -44,6 +44,7 @@ class KafkaProperties {
         var retryBackoffMillis = 100L
         var heartBeatIntervalMillis = 3000
         var sessionTimeoutMillis = 10000
+        val commitBatchSize = batchSize
     }
 
     class KafkaProducerProperties {

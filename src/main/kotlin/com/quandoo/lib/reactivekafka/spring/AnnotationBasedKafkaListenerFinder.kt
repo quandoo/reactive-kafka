@@ -59,16 +59,16 @@ class AnnotationBasedKafkaListenerFinder(
         val preFilterBeans = applicationContext.getBeansWithAnnotation(KafkaListenerPreFilter::class.java).values
         val filterBeans = applicationContext.getBeansWithAnnotation(KafkaListenerFilter::class.java).values
         val preFilterGroupIdMap = preFilterBeans
-                .groupBy { embeddedValueResolver.resolveStringValue(it.javaClass.getAnnotation(KafkaListenerPreFilter::class.java).groupId)!! }
+            .groupBy { embeddedValueResolver.resolveStringValue(it.javaClass.getAnnotation(KafkaListenerPreFilter::class.java).groupId)!! }
 
         val filterGroupIdMap = filterBeans
-                .groupBy { embeddedValueResolver.resolveStringValue(it.javaClass.getAnnotation(KafkaListenerFilter::class.java).groupId)!! }
-                .map { filters ->
-                    filters.key to filters.value.groupBy {
-                        val annotation = it.javaClass.getAnnotation(KafkaListenerFilter::class.java)
-                        (String::class to annotation.valueClass)
-                    }
-                }.toMap()
+            .groupBy { embeddedValueResolver.resolveStringValue(it.javaClass.getAnnotation(KafkaListenerFilter::class.java).groupId)!! }
+            .map { filters ->
+                filters.key to filters.value.groupBy {
+                    val annotation = it.javaClass.getAnnotation(KafkaListenerFilter::class.java)
+                    (String::class to annotation.valueClass)
+                }
+            }.toMap()
 
         checkFilterImpl(preFilterBeans.map { it.javaClass }.toList())
         checkFilterImpl(filterBeans.map { it.javaClass }.toList())
@@ -77,39 +77,42 @@ class AnnotationBasedKafkaListenerFinder(
 
         val lookup = MethodHandles.lookup()
         return reflections.getMethodsAnnotatedWith(KafkaListener::class.java)
-                .map { method ->
-                    val annotation = method.getAnnotation(KafkaListener::class.java)
-                    val instance = configurableBeanFactory.getBean(method.declaringClass)
-                    val preFilter = preFilterGroupIdMap[embeddedValueResolver.resolveStringValue(annotation.groupId)]?.let { it[0] as Predicate<ConsumerRecord<Bytes, Bytes>> }
-                            ?: Predicates.alwaysTrue()
-                    val filter = filterGroupIdMap[embeddedValueResolver.resolveStringValue(annotation.groupId)]?.get(String::class to annotation.valueType)?.let { it[0] as Predicate<ConsumerRecord<out Any?, out Any?>> }
-                            ?: Predicates.alwaysTrue()
-                    val implementationMethodHandle = lookup.unreflect(method)
-                    val callSite = ConstantCallSite(implementationMethodHandle)
-                    val invoker = callSite.dynamicInvoker()
+            .map { method ->
+                val annotation = method.getAnnotation(KafkaListener::class.java)
+                val instance = configurableBeanFactory.getBean(method.declaringClass)
+                val preFilter =
+                    preFilterGroupIdMap[embeddedValueResolver.resolveStringValue(annotation.groupId)]?.let { it[0] as Predicate<ConsumerRecord<Bytes, Bytes>> }
+                        ?: Predicates.alwaysTrue()
+                val filter = filterGroupIdMap[embeddedValueResolver.resolveStringValue(annotation.groupId)]?.get(String::class to annotation.valueType)
+                    ?.let { it[0] as Predicate<ConsumerRecord<out Any?, out Any?>> }
+                    ?: Predicates.alwaysTrue()
+                val implementationMethodHandle = lookup.unreflect(method)
+                val callSite = ConstantCallSite(implementationMethodHandle)
+                val invoker = callSite.dynamicInvoker()
 
-                    KafkaListenerMeta(
-                            handler = getHandler(method.parameterTypes, invoker, instance),
-                            topics = annotation.topics.map { topic -> embeddedValueResolver.resolveStringValue(topic) as String },
-                            keyClass = String::class.java as Class<String?>,
-                            valueClass = annotation.valueType.java as Class<Any?>,
-                            keyDeserializer = StringDeserializer() as Deserializer<String?>,
-                            valueDeserializer = KafkaJacksonDeserializer(objectMapper, annotation.valueType.java) as Deserializer<Any?>,
-                            preFilter = preFilter,
-                            filter = filter,
+                KafkaListenerMeta(
+                    handler = getHandler(method.parameterTypes, invoker, instance),
+                    topics = annotation.topics.map { topic -> embeddedValueResolver.resolveStringValue(topic) as String },
+                    keyClass = String::class.java as Class<String?>,
+                    valueClass = annotation.valueType.java as Class<Any?>,
+                    keyDeserializer = StringDeserializer() as Deserializer<String?>,
+                    valueDeserializer = KafkaJacksonDeserializer(objectMapper, annotation.valueType.java) as Deserializer<Any?>,
+                    preFilter = preFilter,
+                    filter = filter,
 
-                            groupId = StringUtils.trimToNull(embeddedValueResolver.resolveStringValue(annotation.groupId)),
-                            batchSize = annotation.batchSize.let { if (it < 0) null else it },
-                            parallelism = annotation.parallelism.let { if (it < 0) null else it },
-                            maxPoolIntervalMillis = annotation.maxPoolIntervalMillis.let { if (it < 0) null else it },
-                            commitInterval = annotation.commitInterval.let { if (it < 0) null else it },
-                            retryBackoffMillis = annotation.retryBackoffMillis.let { if (it < 0) null else it },
-                            heartBeatIntervalMillis = annotation.heartBeatIntervalMillis.let { if (it < 0) null else it },
-                            sessionTimeoutMillis = annotation.sessionTimeoutMillis.let { if (it < 0) null else it },
-                            partitionAssignmentStrategy = StringUtils.trimToNull(embeddedValueResolver.resolveStringValue(annotation.partitionAssignmentStrategy)),
-                            autoOffsetReset = StringUtils.trimToNull(embeddedValueResolver.resolveStringValue(annotation.autoOffsetReset))
-                    )
-                }
+                    groupId = StringUtils.trimToNull(embeddedValueResolver.resolveStringValue(annotation.groupId)),
+                    batchSize = annotation.batchSize.let { if (it < 0) null else it },
+                    parallelism = annotation.parallelism.let { if (it < 0) null else it },
+                    maxPoolIntervalMillis = annotation.maxPoolIntervalMillis.let { if (it < 0) null else it },
+                    commitInterval = annotation.commitInterval.let { if (it < 0) null else it },
+                    retryBackoffMillis = annotation.retryBackoffMillis.let { if (it < 0) null else it },
+                    heartBeatIntervalMillis = annotation.heartBeatIntervalMillis.let { if (it < 0) null else it },
+                    sessionTimeoutMillis = annotation.sessionTimeoutMillis.let { if (it < 0) null else it },
+                    commitBatchSize = annotation.commitBatchSize.let { if (it < 0) null else it },
+                    partitionAssignmentStrategy = StringUtils.trimToNull(embeddedValueResolver.resolveStringValue(annotation.partitionAssignmentStrategy)),
+                    autoOffsetReset = StringUtils.trimToNull(embeddedValueResolver.resolveStringValue(annotation.autoOffsetReset))
+                )
+            }
     }
 
     private fun getHandler(listenerArgumentTypes: Array<Class<*>>, invoker: MethodHandle, instance: Any): Handler<*, *> {
