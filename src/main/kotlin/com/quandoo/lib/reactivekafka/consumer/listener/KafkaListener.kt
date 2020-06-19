@@ -28,14 +28,14 @@ annotation class KafkaListener(
     val valueType: KClass<*>,
 
     val groupId: String = "",
-    val batchSize: Int = -1,
-    val parallelism: Int = -1,
-    val maxPoolIntervalMillis: Int = -1,
-    val commitInterval: Long = -1L,
-    val commitBatchSize: Int = -1,
-    val retryBackoffMillis: Long = -1L,
-    val heartBeatIntervalMillis: Int = -1,
-    val sessionTimeoutMillis: Int = -1,
+    val batchSize: String = "",
+    val parallelism: String = "",
+    val maxPoolIntervalMillis: String = "",
+    val commitInterval: String = "",
+    val commitBatchSize: String = "",
+    val retryBackoffMillis: String = "",
+    val heartBeatIntervalMillis: String = "",
+    val sessionTimeoutMillis: String = "",
     val partitionAssignmentStrategy: String = "",
     val autoOffsetReset: String = ""
 )

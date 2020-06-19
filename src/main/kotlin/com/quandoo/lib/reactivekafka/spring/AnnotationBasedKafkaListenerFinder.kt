@@ -52,9 +52,10 @@ class AnnotationBasedKafkaListenerFinder(
     private val objectMapper: ObjectMapper
 ) : KafkaListenerFinder<Any?, Any?> {
 
+    private val embeddedValueResolver = EmbeddedValueResolver(configurableBeanFactory)
+
     @Suppress("UNCHECKED_CAST")
     override fun findListeners(): List<KafkaListenerMeta<String?, Any?>> {
-        val embeddedValueResolver = EmbeddedValueResolver(configurableBeanFactory)
         val reflections = Reflections("", MethodAnnotationsScanner())
         val preFilterBeans = applicationContext.getBeansWithAnnotation(KafkaListenerPreFilter::class.java).values
         val filterBeans = applicationContext.getBeansWithAnnotation(KafkaListenerFilter::class.java).values
@@ -101,14 +102,14 @@ class AnnotationBasedKafkaListenerFinder(
                     filter = filter,
 
                     groupId = StringUtils.trimToNull(embeddedValueResolver.resolveStringValue(annotation.groupId)),
-                    batchSize = annotation.batchSize.let { if (it < 0) null else it },
-                    parallelism = annotation.parallelism.let { if (it < 0) null else it },
-                    maxPoolIntervalMillis = annotation.maxPoolIntervalMillis.let { if (it < 0) null else it },
-                    commitInterval = annotation.commitInterval.let { if (it < 0) null else it },
-                    retryBackoffMillis = annotation.retryBackoffMillis.let { if (it < 0) null else it },
-                    heartBeatIntervalMillis = annotation.heartBeatIntervalMillis.let { if (it < 0) null else it },
-                    sessionTimeoutMillis = annotation.sessionTimeoutMillis.let { if (it < 0) null else it },
-                    commitBatchSize = annotation.commitBatchSize.let { if (it < 0) null else it },
+                    batchSize = resolveIntValueOrDefault(annotation.batchSize, -1).let { if (it < 0) null else it },
+                    parallelism = resolveIntValueOrDefault(annotation.parallelism, -1).let { if (it < 0) null else it },
+                    maxPoolIntervalMillis = resolveIntValueOrDefault(annotation.maxPoolIntervalMillis, -1).let { if (it < 0) null else it },
+                    commitInterval = resolveLongValueOrDefault(annotation.commitInterval, -1).let { if (it < 0) null else it },
+                    retryBackoffMillis = resolveLongValueOrDefault(annotation.retryBackoffMillis, -1).let { if (it < 0) null else it },
+                    heartBeatIntervalMillis = resolveIntValueOrDefault(annotation.heartBeatIntervalMillis, -1).let { if (it < 0) null else it },
+                    sessionTimeoutMillis = resolveIntValueOrDefault(annotation.sessionTimeoutMillis, -1).let { if (it < 0) null else it },
+                    commitBatchSize = resolveIntValueOrDefault(annotation.commitBatchSize, -1).let { if (it < 0) null else it },
                     partitionAssignmentStrategy = StringUtils.trimToNull(embeddedValueResolver.resolveStringValue(annotation.partitionAssignmentStrategy)),
                     autoOffsetReset = StringUtils.trimToNull(embeddedValueResolver.resolveStringValue(annotation.autoOffsetReset))
                 )
@@ -156,5 +157,15 @@ class AnnotationBasedKafkaListenerFinder(
                 check(perValueClass.value.size == 1) { "Filters have to be unique per groupId -> valueClass combination" }
             }
         }
+    }
+
+    private fun resolveIntValueOrDefault(value: String, default: Int): Int {
+        return StringUtils.trimToNull(embeddedValueResolver.resolveStringValue(value))
+            .let { runCatching { it.toInt() }.getOrElse { default } }
+    }
+
+    private fun resolveLongValueOrDefault(value: String, default: Long): Long {
+        return StringUtils.trimToNull(embeddedValueResolver.resolveStringValue(value))
+            .let { runCatching { it.toLong() }.getOrElse { default } }
     }
 }
