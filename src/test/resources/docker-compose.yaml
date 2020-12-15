@@ -16,7 +16,7 @@ services:
       KAFKA_INTER_BROKER_LISTENER_NAME: INTERNAL
       KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
       KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 1
-      KAFKA_CREATE_TOPICS: "testentity1:12:1,testentity2:12:1"
+      KAFKA_CREATE_TOPICS: "testentity1:12:1,testentity2:12:1,testentity3:12:1"
 
   zookeeper:
     image: wurstmeister/zookeeper:latest

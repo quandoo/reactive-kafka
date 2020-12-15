@@ -78,6 +78,7 @@ class AnnotationBasedKafkaListenerFinder(
 
         val lookup = MethodHandles.lookup()
         return reflections.getMethodsAnnotatedWith(KafkaListener::class.java)
+            .filter { it.getAnnotation(KafkaListener::class.java).enabled }
             .map { method ->
                 val annotation = method.getAnnotation(KafkaListener::class.java)
                 val instance = configurableBeanFactory.getBean(method.declaringClass)

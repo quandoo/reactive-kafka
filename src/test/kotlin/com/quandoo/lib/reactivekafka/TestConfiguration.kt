@@ -19,6 +19,7 @@ import com.fasterxml.jackson.databind.ObjectMapper
 import com.fasterxml.jackson.module.kotlin.KotlinModule
 import com.google.common.base.Predicate
 import com.quandoo.lib.reactivekafka.consumer.TestBatchConsumer
+import com.quandoo.lib.reactivekafka.consumer.TestDisabledConsumer
 import com.quandoo.lib.reactivekafka.consumer.TestEntity1
 import com.quandoo.lib.reactivekafka.consumer.TestEntity2
 import com.quandoo.lib.reactivekafka.consumer.TestSingleConsumer
@@ -43,6 +44,11 @@ internal class TestConfiguration {
     @Bean
     fun testSingleConsumer(): TestSingleConsumer {
         return TestSingleConsumer()
+    }
+
+    @Bean
+    fun testDisabledConsumer(): TestDisabledConsumer {
+        return TestDisabledConsumer()
     }
 
     @Bean
