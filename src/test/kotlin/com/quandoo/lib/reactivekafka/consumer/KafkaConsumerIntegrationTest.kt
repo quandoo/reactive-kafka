@@ -30,9 +30,13 @@ internal class KafkaConsumerIntegrationTest : AbstractIntegrationTest() {
 
     private val topic1 = "testentity1"
     private val topic2 = "testentity2"
+    private val topic3 = "testentity3"
 
     @Autowired
     private lateinit var testSingleConsumer: TestSingleConsumer
+
+    @Autowired
+    private lateinit var testDisabledConsumer: TestDisabledConsumer
 
     @Autowired
     private lateinit var testBatchConsumer: TestBatchConsumer
@@ -44,6 +48,7 @@ internal class KafkaConsumerIntegrationTest : AbstractIntegrationTest() {
     internal fun setUp() {
         testSingleConsumer.messages.clear()
         testBatchConsumer.messages.clear()
+        testDisabledConsumer.messages.clear()
     }
 
     @AfterEach
@@ -260,6 +265,17 @@ internal class KafkaConsumerIntegrationTest : AbstractIntegrationTest() {
             assertThat(testBatchConsumer.messages)
                     .hasSize(3)
                     .contains(message1, message2, message3)
+        }
+    }
+
+    @Test
+    fun `DisabledHandler- Test message is never consumed`() {
+        for (i in 1..101) {
+            sendMessageToKafka(topic3, TestEntity1("message$i", i))
+        }
+
+        await().pollDelay(Duration.ofSeconds(10L)).timeout(Duration.ofSeconds(20L)).untilAsserted {
+            assertThat(testDisabledConsumer.messages).hasSize(0)
         }
     }
 }
