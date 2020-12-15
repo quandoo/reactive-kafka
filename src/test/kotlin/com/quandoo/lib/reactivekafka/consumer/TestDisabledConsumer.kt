@@ -18,13 +18,13 @@ package com.quandoo.lib.reactivekafka.consumer
 import com.quandoo.lib.reactivekafka.consumer.listener.KafkaListener
 import io.reactivex.Completable
 import io.reactivex.schedulers.Schedulers
-import org.apache.kafka.clients.consumer.ConsumerRecord
-import org.slf4j.LoggerFactory
-import org.testcontainers.shaded.org.apache.commons.lang.RandomStringUtils
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.ConcurrentLinkedDeque
 import java.util.concurrent.Executors
 import java.util.concurrent.atomic.AtomicInteger
+import org.apache.kafka.clients.consumer.ConsumerRecord
+import org.slf4j.LoggerFactory
+import org.testcontainers.shaded.org.apache.commons.lang.RandomStringUtils
 
 class TestDisabledConsumer() {
 
