@@ -40,7 +40,7 @@ class TestDisabledConsumer() {
     private val scheduler = Schedulers.from(Executors.newSingleThreadExecutor())
 
     @Synchronized
-    @KafkaListener(topics = ["testentity3"], valueType = TestEntity1::class, enabled = false)
+    @KafkaListener(topics = ["testentity3"], valueType = TestEntity1::class, enabled = "false")
     fun process(message: ConsumerRecord<String, TestEntity1>): Completable {
         log.info("Message received: {}", message.value())
         Thread.sleep(50)

@@ -27,7 +27,7 @@ annotation class KafkaListener(
     val topics: Array<String>,
     val valueType: KClass<*>,
 
-    val enabled: Boolean = true,
+    val enabled: String = "true",
     val groupId: String = "",
     val batchSize: String = "",
     val parallelism: String = "",
